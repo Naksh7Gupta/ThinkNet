@@ -9,7 +9,7 @@ An Input node's `config.shape` describes **one sample and excludes the batch axi
 - `{"shape":[128]}` accepts tensors shaped `[batch, 128]`.
 - `{"shape":[196,768]}` describes token embeddings shaped `[batch,196,768]`.
 - `{"shape":[-1,768]}` permits a variable sequence length and fixed feature width. At most one `-1` is allowed.
-- The shape-preview API accepts `input_shape` for a concrete runtime shape including batch, e.g. `[2,24]`.
+- The shape-preview endpoint can accept a concrete runtime shape including batch, e.g. `[2,24]`.
 
 Node configuration can expose `in_features`, `out_features`, `d_model`, `num_heads`, `num_kv_heads`, `hidden_dim`, `num_layers`, `patch_size`, `in_channels`, and other architecture-specific settings. Use `AutoLinear` if the input feature width should be inferred from the first runtime tensor.
 
@@ -32,8 +32,10 @@ The source file is standalone at `backend/thinknet_backend_core.py`; run Uvicorn
 - `GET /health` — health check
 - `GET /api/v1/nodes` — node catalog for the GUI's "+" menus
 - `POST /api/v1/graphs/validate` — validate graph structure/configuration
-- `POST /api/v1/graphs/infer-shapes?input_shape=2&input_shape=24` — best-effort shape preview
+- `POST /api/v1/graphs/infer-shapes` — best-effort shape preview
 - `POST /api/v1/models/compile` — compile the currently supported execution subset
+
+For the shape-preview endpoint, the current handler accepts a body containing both `payload` (the graph object) and optional `input_shape`, e.g. `{ "payload": { ...graph... }, "input_shape": [2, 24] }`.
 
 Example graph:
 

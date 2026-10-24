@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThinkNet - Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Top Navigation -->
+    <header class="top-nav">
+      <div class="logo">
+        <span class="logo-icon">🧠</span>
+        <span class="logo-text">ThinkNet</span>
+      </div>
+      <nav class="main-nav">
+        <button class="nav-item active" data-section="build">Build</button>
+        <button class="nav-item" data-section="data">Data</button>
+        <button class="nav-item" data-section="train">Train</button>
+        <button class="nav-item" data-section="evaluate">Evaluate</button>
+        <button class="nav-item" data-section="deploy">Deploy</button>
+        <button class="nav-item" data-section="agents">Agents</button>
+      </nav>
+      <div class="top-actions">
+        <div class="model-selector">
+          <span>Transformer-XL / Draft v2</span>
+          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" fill="none"/></svg>
+        </div>
+        <button class="icon-btn" title="Theme">🌙</button>
+        <button class="icon-btn" title="Settings">⚙️</button>
+        <button class="icon-btn" title="Profile">👤</button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <!-- Left Sidebar -->
+      <aside class="left-sidebar">
+        <button class="sidebar-btn active" title="Build">🚀</button>
+        <button class="sidebar-btn" title="Add">➕</button>
+        <button class="sidebar-btn" title="Models">📦</button>
+        <button class="sidebar-btn" title="Connections">🔗</button>
+        <button class="sidebar-btn" title="Tools">🔧</button>
+      </aside>
+
+      <!-- Main Canvas Area -->
+      <main class="canvas-area" id="canvas">
+        <div class="canvas-toolbar">
+          <div class="breadcrumb">
+            <span>Models / GPT-Small / Main Architecture</span>
+            <span class="status-dot"></span>
+          </div>
+          <div class="template-selector">
+            <span>Template: Tiny Transformer</span>
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" fill="none"/></svg>
+          </div>
+          <div class="zoom-controls">
+            <button>-</button>
+            <span>100%</span>
+            <button>+</button>
+          </div>
+          <button class="add-node-btn">+ Add Node <kbd>Shift+A</kbd></button>
+        </div>
+
+        <!-- Node Graph Placeholder -->
+        <div class="node-graph" id="nodeGraph">
+          <!-- Nodes will be rendered here by JS -->
+          <div class="node input-node" style="left: 40px; top: 180px;">
+            <div class="node-header">Input Tokens</div>
+            <div class="node-body">
+              <div class="param"><label>Vocab size</label><input value="50257"></div>
+              <div class="param"><label>Sequence length</label><input value="1024"></div>
+              <div class="param type">Type: Discrete <span>Tokens →</span></div>
+            </div>
+          </div>
+
+          <div class="node embedding-node" style="left: 220px; top: 160px;">
+            <div class="node-header">Embedding (Positional)</div>
+            <div class="node-body">
+              <div class="param"><label>Dimension</label><input value="768"></div>
+              <div class="param"><label>Type</label><span class="badge">Learned positional</span></div>
+              <div class="param type">Matrix: W<sub>e</sub> <span>Tensors →</span></div>
+            </div>
+          </div>
+
+          <div class="node attention-node selected" style="left: 420px; top: 100px;">
+            <div class="node-header">Multi-Head Attention</div>
+            <div class="node-body">
+              <div class="param"><label>Heads</label><input value="8"></div>
+              <div class="param"><label>Key size</label><input value="64"></div>
+              <div class="param"><label>Dropout</label><input value="0.10"></div>
+              <div class="advanced">Advanced Parameters (Masking, FlashAttn)</div>
+              <div class="concept">Concept: Lets the model focus on important words across the sequence simultaneously.</div>
+              <div class="param"><label>Vocab projection</label><input value="50257"></div>
+              <div class="param"><label>Temperature</label><input value="0.7"></div>
+              <div class="param type">Softmax Distribution <span>Predictions →</span></div>
+            </div>
+          </div>
+
+          <!-- More nodes can be added dynamically -->
+        </div>
+      </main>
+
+      <!-- Right Panels -->
+      <aside class="right-panels">
+        <div class="panel project-panel">
+          <div class="panel-header">
+            <span>Project</span>
+            <div class="panel-actions">
+              <button>×</button>
+              <button>≡</button>
+            </div>
+          </div>
+          <div class="panel-search">
+            <input type="text" placeholder="Filter hierarchy...">
+          </div>
+          <div class="hierarchy">
+            <div class="folder">Models <span>2</span></div>
+            <div class="item active">GPT-Small <span class="badge active">Active</span></div>
+            <div class="item">Vision-Tiny <span class="badge">Draft</span></div>
+            <div class="folder">Datasets</div>
+            <div class="item">OpenWebText-Sample <span>120k</span></div>
+            <div class="item">BookCorpus-Mini <span>45k</span></div>
+          </div>
+        </div>
+
+        <div class="panel properties-panel">
+          <div class="panel-header">
+            <span>Properties</span>
+            <span class="node-id">Node #3</span>
+          </div>
+          <div class="prop-section">
+            <label>Node Label</label>
+            <input value="Multi-Head Attention">
+          </div>
+          <div class="prop-section">
+            <div class="section-title">Basics <span>Primary controls</span></div>
+            <div class="param-row">
+              <label>Number of heads</label>
+              <div class="stepper"><button>-</button><input value="8"><button>+</button></div>
+            </div>
+            <div class="param-row">
+              <label>Dimension per head</label>
+              <input value="64">
+            </div>
+            <div class="param-row">
+              <label>Dropout rate</label>
+              <div class="slider-group">
+                <input type="range" min="0" max="1" step="0.01" value="0.1">
+                <span>0.10</span>
+              </div>
+            </div>
+          </div>
+          <div class="prop-section">
+            <div class="section-title">Advanced settings <span>Rotary / Bias</span></div>
+          </div>
+          <div class="explanation">
+            <div class="exp-title">Plain Explanation</div>
+            <p>Allows tokens to attend to other tokens in parallel representation subspaces, learning contextual relationships across your sequence.</p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

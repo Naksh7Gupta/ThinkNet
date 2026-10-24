@@ -15,11 +15,13 @@ Node configuration can expose `in_features`, `out_features`, `d_model`, `num_hea
 
 ## Run
 
+From the repository root:
+
 ```bash
 python -m venv .venv
 # Windows: .venv\\Scripts\\activate
 # macOS/Linux: source .venv/bin/activate
-pip install -e .
+pip install -r backend/requirements.txt
 uvicorn backend.thinknet_backend_core:app --reload
 ```
 

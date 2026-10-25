@@ -37,7 +37,8 @@ def test_quantizer_int8_dynamically_quantizes_linear_and_runs():
     assert dynamic_linears
     assert quantization_report(result, "int8")["dynamic_int8_linear_modules"] == len(dynamic_linears)
     assert result(torch.randn(2, 4)).shape == (2, 2)
-    assert all(isinstance(module, nn.Linear) for module in source.modules() if type(module) is nn.Linear)
+    assert sum(type(module) is nn.Linear for module in source.modules()) == 2
+    assert sum(type(module) is nn.Linear for module in result.modules()) == 0
 
 
 def test_quantizer_validates_dtype_and_model_input():
@@ -106,8 +107,14 @@ def test_residual_add_executes_skip_connection_with_gradients():
     assert infer_shapes(graph)["outputs"]["output"] == [None, 4]
     model = CompiledGraph(graph)
     x = torch.randn(3, 4)
+    with torch.no_grad():
+        hidden = model.modules_by_key[model.keys["linear1"]](x)
+        hidden = model.modules_by_key[model.keys["activation"]](hidden)
+        main_branch = model.modules_by_key[model.keys["linear2"]](hidden)
+        expected = main_branch + x
     output = model(x)
     assert output.shape == (3, 4)
+    torch.testing.assert_close(output, expected)
     output.square().mean().backward()
     assert all(module.weight.grad is not None for module in model.modules() if isinstance(module, nn.Linear))
 
@@ -141,6 +148,7 @@ def test_quantize_api_returns_distinct_model_handle():
     assert data["model_id"] != source_id
     assert data["source_model_id"] == source_id
     assert data["report"]["dynamic_int8_linear_modules"] >= 1
+    assert data["parameter_count"] == compiled.json()["parameter_count"]
     assert MODEL_STORE[source_id] is source
 
     assert client.get(f"/api/v1/models/{data['model_id']}").status_code == 200

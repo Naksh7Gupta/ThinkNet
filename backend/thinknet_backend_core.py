@@ -500,11 +500,15 @@ def list_architectures():
 @app.post("/api/v1/models/quantize")
 def quantize_compiled_model(payload: QuantizationRequest):
     """Return a new model handle transformed using the requested dtype."""
+    try:
+        transform = QuantizerNode(dtype=payload.dtype)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     source = MODEL_STORE.get(payload.model_id)
     if source is None:
         raise HTTPException(status_code=404, detail=f"Unknown model_id '{payload.model_id}'.")
     try:
-        result = QuantizerNode(dtype=payload.dtype)(source)
+        result = transform(source)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     new_model_id = uuid4().hex

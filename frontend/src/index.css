@@ -1,0 +1,100 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+@theme {
+  --font-sans: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", ui-monospace, monospace;
+  --color-background: #f4f5f8;
+  --color-foreground: #16181d;
+  --color-card: #ffffff;
+  --color-card-foreground: #16181d;
+  --color-muted: #eef0f4;
+  --color-muted-foreground: #5f6774;
+  --color-border: #d9dee7;
+  --color-ring: #3b4f8a;
+  --color-primary: #1f3a8a;
+  --color-primary-foreground: #f8fafc;
+  --color-accent: #e8ecf4;
+  --color-accent-foreground: #1f3a8a;
+  --color-destructive: #b42318;
+  --color-success: #067647;
+  --color-warning: #b54708;
+  --radius-lg: 10px;
+  --radius-md: 8px;
+  --radius-sm: 6px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.react-flow {
+  --xy-background-color: #eef1f6;
+  --xy-node-border-radius: 8px;
+}
+
+.react-flow__background {
+  background-color: #eef1f6 !important;
+}
+
+.react-flow__minimap {
+  background: #fff !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.react-flow__controls {
+  box-shadow: 0 1px 2px rgb(16 24 40 / 8%) !important;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: #fff !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  fill: #344054 !important;
+}
+
+.react-flow__edge-path {
+  stroke: #7d89a1;
+  stroke-width: 1.6;
+}
+
+.react-flow__connection-line {
+  stroke: #1f3a8a;
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgb(16 24 40 / 18%);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c8ced9;
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}

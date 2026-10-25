@@ -1,27 +1,42 @@
-# ThinkNet Frontend (Next.js + TypeScript)
+# ThinkNet Frontend
 
-Core dashboard workspace. All features wrap around this single shell.
+Desktop architecture editor for the current ThinkNet backend. The UI only exposes operations the Python API actually implements.
 
-## Tech
-- **Next.js 16** (App Router)
-- **React 19**
-- **TypeScript**
-- **Tailwind CSS**
+## Stack
 
-## Structure
-- `src/app/page.tsx` — Dashboard (Build view with node graph)
-- `src/app/layout.tsx` — Root layout
-- `src/app/globals.css` — Design tokens
+Tauri v2, React, TypeScript, Vite, Tailwind CSS, shadcn/ui, React Flow, Zustand, TanStack Query.
 
-## Development
+## Run
+
+Start the backend from the repository root (with the backend virtualenv active):
+
+```bash
+uvicorn backend.thinknet_backend_core:app --reload
+```
+
+Then, in another terminal:
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## Next
-- Extract components (Nav, Canvas, Node, Properties panel)
-- Add real node connections (SVG)
-- Section routing (Data / Train / Evaluate / etc.)
-- Tauri v2 integration
+The Vite app is at `http://localhost:1420` and talks to `http://127.0.0.1:8000` unless `VITE_API_BASE_URL` is set.
+
+Desktop shell (requires Rust / Cargo):
+
+```bash
+cd frontend
+npm run tauri dev
+```
+
+## Checks
+
+```bash
+cd frontend
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```

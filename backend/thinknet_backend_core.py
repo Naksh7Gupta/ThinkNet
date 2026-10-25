@@ -480,6 +480,20 @@ class QuantizationRequest(BaseModel):
     dtype: str = Field(min_length=1, max_length=20)
 
 
+def _logical_parameter_count(model: nn.Module) -> int:
+    """Count ordinary parameters plus weights packed inside dynamic INT8 Linear modules."""
+    total = sum(parameter.numel() for parameter in model.parameters())
+    for module in model.modules():
+        module_path = type(module).__module__.lower()
+        if "quantized.dynamic" in module_path and "linear" in module_path:
+            weight = module.weight()
+            bias = module.bias()
+            total += weight.numel()
+            if bias is not None:
+                total += bias.numel()
+    return total
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "thinknet-backend", "torch_version": torch.__version__}
@@ -518,7 +532,7 @@ def quantize_compiled_model(payload: QuantizationRequest):
         "model_id": new_model_id,
         "source_model_id": payload.model_id,
         "dtype": payload.dtype,
-        "parameter_count": sum(parameter.numel() for parameter in result.parameters()),
+        "parameter_count": _logical_parameter_count(result),
         "report": quantization_report(result, payload.dtype),
         "note": "This new model handle is in-memory and is lost when the backend process restarts.",
     }
@@ -531,7 +545,7 @@ def get_model_metadata(model_id: str):
         raise HTTPException(status_code=404, detail=f"Unknown model_id '{model_id}'.")
     return {
         "model_id": model_id,
-        "parameter_count": sum(parameter.numel() for parameter in model.parameters()),
+        "parameter_count": _logical_parameter_count(model),
         "training": model.training,
         "module_count": sum(1 for _ in model.modules()),
     }
@@ -567,7 +581,7 @@ def compile_model(payload: GraphDef):
         model_id = uuid4().hex
         MODEL_STORE[model_id] = model
         return {"compiled": True, "model_id": model_id,
-                "parameter_count": sum(p.numel() for p in model.parameters()),
+                "parameter_count": _logical_parameter_count(model),
                 "shape_preview": infer_shapes(payload),
                 "note": "This model handle is in-memory and is lost when the backend process restarts."}
     except Exception as exc:

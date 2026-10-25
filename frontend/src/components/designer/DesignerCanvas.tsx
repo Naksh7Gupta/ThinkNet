@@ -90,7 +90,7 @@ export function DesignerCanvas({ catalog }: { catalog: CatalogNode[] }) {
         <MiniMap
           pannable
           zoomable
-          nodeColor={(node) => node.data.catalog?.color ?? "#94A3B8"}
+          nodeColor={(node) => (node as ThinkNetNode).data.catalog?.color ?? "#94A3B8"}
         />
       </ReactFlow>
       {nodes.length === 0 && (

@@ -62,7 +62,8 @@ def quantize_model(model: nn.Module, dtype: str) -> nn.Module:
 def quantization_report(model: nn.Module, dtype: str) -> dict[str, int | str]:
     """Report actual quantized modules without claiming full-model INT8."""
     dynamic_linear = sum(
-        "DynamicQuantizedLinear" in type(module).__name__
+        "quantized.dynamic" in type(module).__module__.lower()
+        and "linear" in type(module).__module__.lower()
         for module in model.modules()
     )
     floating_parameters = sum(

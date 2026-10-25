@@ -72,6 +72,15 @@ NODE_IMPLEMENTATION_STATUS = {
     "Architecture": "implemented-and-tested",
     "Quantizer": "implemented-and-tested",
     "LMHead": "implemented-and-tested",
+    "MultiHeadAttention": "implemented-and-tested",
+    "CausalSelfAttention": "implemented-and-tested",
+    "PreNormTransformerBlock": "implemented-and-tested",
+    "MLP": "implemented-and-tested",
+    "FeedForward": "implemented-and-tested",
+    "SwiGLU": "implemented-and-tested",
+    "LearnedPositionEmbedding": "implemented-and-tested",
+    "SinusoidalPositionEmbedding": "implemented-and-tested",
+    "LayerScale": "implemented-and-tested",
 }
 
 CATEGORY_COLORS = {
@@ -380,6 +389,118 @@ class _Reshape(nn.Module):
         return x.reshape(x.shape[0], *self.shape)
 
 
+class _SequenceAttention(nn.Module):
+    """Batch-first self-attention with optional causal masking."""
+    def __init__(self, d_model: int, num_heads: int, dropout: float = 0.0, causal: bool = False):
+        super().__init__()
+        if d_model < 1 or num_heads < 1 or d_model % num_heads:
+            raise ValueError("d_model must be positive and divisible by num_heads.")
+        if not 0.0 <= dropout < 1.0:
+            raise ValueError("dropout must be in [0, 1).")
+        self.attention = nn.MultiheadAttention(d_model, num_heads, dropout=dropout, batch_first=True)
+        self.causal = causal
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.ndim != 3:
+            raise ValueError("Attention expects [batch, sequence, features].")
+        mask = None
+        if self.causal:
+            length = x.shape[1]
+            mask = torch.triu(torch.ones(length, length, device=x.device, dtype=torch.bool), diagonal=1)
+        return self.attention(x, x, x, attn_mask=mask, need_weights=False)[0]
+
+
+class _PreNormTransformerBlock(nn.Module):
+    """Pre-norm self-attention and feed-forward residual block."""
+    def __init__(self, d_model: int, num_heads: int, mlp_ratio: int = 4, dropout: float = 0.0, causal: bool = False):
+        super().__init__()
+        if mlp_ratio < 1:
+            raise ValueError("mlp_ratio must be positive.")
+        self.norm1 = nn.LayerNorm(d_model)
+        self.attention = _SequenceAttention(d_model, num_heads, dropout, causal)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, d_model * mlp_ratio), nn.GELU(),
+            nn.Dropout(dropout), nn.Linear(d_model * mlp_ratio, d_model),
+            nn.Dropout(dropout),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x + self.attention(self.norm1(x))
+        return x + self.ffn(self.norm2(x))
+
+
+class _FeedForward(nn.Module):
+    def __init__(self, d_model: int, hidden_features: int | None = None, dropout: float = 0.0):
+        super().__init__()
+        hidden = hidden_features or 4 * d_model
+        self.layers = nn.Sequential(nn.Linear(d_model, hidden), nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden, d_model))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.layers(x)
+
+
+class _SwiGLU(nn.Module):
+    def __init__(self, d_model: int, hidden_features: int | None = None):
+        super().__init__()
+        hidden = hidden_features or 4 * d_model
+        self.gate = nn.Linear(d_model, hidden)
+        self.value = nn.Linear(d_model, hidden)
+        self.projection = nn.Linear(hidden, d_model)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.projection(torch.nn.functional.silu(self.gate(x)) * self.value(x))
+
+
+class _LearnedPositionEmbedding(nn.Module):
+    def __init__(self, d_model: int, max_seq_len: int = 2048):
+        super().__init__()
+        if d_model < 1 or max_seq_len < 1:
+            raise ValueError("d_model and max_seq_len must be positive.")
+        self.embedding = nn.Embedding(max_seq_len, d_model)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.ndim != 3:
+            raise ValueError("LearnedPositionEmbedding expects [batch, sequence, features].")
+        if x.shape[1] > self.embedding.num_embeddings or x.shape[2] != self.embedding.embedding_dim:
+            raise ValueError("Sequence length or feature width does not match positional embedding configuration.")
+        positions = torch.arange(x.shape[1], device=x.device)
+        return x + self.embedding(positions).unsqueeze(0)
+
+
+class _SinusoidalPositionEmbedding(nn.Module):
+    def __init__(self, d_model: int):
+        super().__init__()
+        if d_model < 1:
+            raise ValueError("d_model must be positive.")
+        self.d_model = d_model
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.ndim != 3 or x.shape[-1] != self.d_model:
+            raise ValueError("SinusoidalPositionEmbedding expects [batch, sequence, d_model].")
+        length = x.shape[1]
+        positions = torch.arange(length, device=x.device, dtype=torch.float32).unsqueeze(1)
+        scale = torch.exp(torch.arange(0, self.d_model, 2, device=x.device, dtype=torch.float32) * (-torch.log(torch.tensor(10000.0, device=x.device)) / self.d_model))
+        encoding = torch.zeros(length, self.d_model, device=x.device, dtype=torch.float32)
+        encoding[:, 0::2] = torch.sin(positions * scale)
+        if self.d_model > 1:
+            encoding[:, 1::2] = torch.cos(positions * scale[:encoding[:, 1::2].shape[1]])
+        return x + encoding.to(dtype=x.dtype).unsqueeze(0)
+
+
+class _LayerScale(nn.Module):
+    def __init__(self, d_model: int, init_value: float = 1e-5):
+        super().__init__()
+        if d_model < 1:
+            raise ValueError("d_model must be positive.")
+        self.gamma = nn.Parameter(torch.full((d_model,), float(init_value)))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.shape[-1] != self.gamma.numel():
+            raise ValueError(f"LayerScale expects final dimension {self.gamma.numel()}, got {x.shape[-1]}.")
+        return x * self.gamma
+
+
 class CompiledGraph(nn.Module):
     """Initial executable subset; architecture nodes are expanded incrementally."""
     def __init__(self, graph: GraphDef):
@@ -430,6 +551,40 @@ class CompiledGraph(nn.Module):
             elif t == "ReLU": modules[self.keys[n.id]] = nn.ReLU()
             elif t == "SiLU": modules[self.keys[n.id]] = nn.SiLU()
             elif t == "Identity": modules[self.keys[n.id]] = nn.Identity()
+            elif t == "MultiHeadAttention":
+                modules[self.keys[n.id]] = _SequenceAttention(
+                    c.get("d_model", 512), c.get("num_heads", 8), c.get("dropout", 0.0), causal=False
+                )
+            elif t == "CausalSelfAttention":
+                modules[self.keys[n.id]] = _SequenceAttention(
+                    c.get("d_model", 512), c.get("num_heads", 8), c.get("dropout", 0.0), causal=True
+                )
+            elif t == "PreNormTransformerBlock":
+                modules[self.keys[n.id]] = _PreNormTransformerBlock(
+                    c.get("d_model", 512), c.get("num_heads", 8),
+                    c.get("mlp_ratio", 4), c.get("dropout", 0.0),
+                    c.get("causal", False),
+                )
+            elif t in {"MLP", "FeedForward"}:
+                modules[self.keys[n.id]] = _FeedForward(
+                    c.get("d_model", c.get("in_features", 128)),
+                    c.get("hidden_features", c.get("hidden_dim")),
+                    c.get("dropout", 0.0),
+                )
+            elif t == "SwiGLU":
+                modules[self.keys[n.id]] = _SwiGLU(
+                    c.get("d_model", 128), c.get("hidden_features", c.get("hidden_dim"))
+                )
+            elif t == "LearnedPositionEmbedding":
+                modules[self.keys[n.id]] = _LearnedPositionEmbedding(
+                    c.get("d_model", 128), c.get("max_seq_len", 2048)
+                )
+            elif t == "SinusoidalPositionEmbedding":
+                modules[self.keys[n.id]] = _SinusoidalPositionEmbedding(c.get("d_model", 128))
+            elif t == "LayerScale":
+                modules[self.keys[n.id]] = _LayerScale(
+                    c.get("d_model", 128), c.get("init_value", 1e-5)
+                )
             elif t == "Architecture":
                 try:
                     modules[self.keys[n.id]] = build_architecture(c.get("architecture"), c.get("config", {}))

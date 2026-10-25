@@ -9,6 +9,8 @@ from torch import nn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.thinknet_architectures import architecture_catalog, build_architecture
+
 
 # User-editable catalog metadata. Each entry can be surfaced in the GUI's "+" menu.
 NODE_CATALOG = [
@@ -32,7 +34,7 @@ NODE_CATALOG = [
     ("PatchEmbedding", "Vision"), ("ClassToken", "Vision"),
     ("VisionTransformerBlock", "Vision"), ("GlobalAveragePool", "Vision"),
     ("Conv2d", "Vision"), ("MaxPool2d", "Vision"), ("Flatten", "Shape"),
-    ("Reshape", "Shape"), ("MeanPool", "Shape"),
+    ("Reshape", "Shape"), ("MeanPool", "Shape"), ("Architecture", "Architecture"),
 ]
 CATALOG = [{"type": name, "category": category} for name, category in NODE_CATALOG]
 
@@ -97,6 +99,13 @@ def validate_graph(graph: GraphDef) -> list[str]:
                 errors.append(f"Input '{node.id}' dimensions must be positive integers; -1 is allowed for one variable dimension.")
             elif sum(d == -1 for d in shape) > 1:
                 errors.append(f"Input '{node.id}' may contain at most one -1 dimension.")
+        if node.type == "Architecture":
+            architecture_name = cfg.get("architecture")
+            supported = {item["name"] for item in architecture_catalog()}
+            if not isinstance(architecture_name, str) or architecture_name not in supported:
+                errors.append(f"Node '{node.id}': config.architecture must be one of the supported architecture names.")
+            if not isinstance(cfg.get("config", {}), dict):
+                errors.append(f"Node '{node.id}': config.config must be an object.")
         if node.type in {"MultiHeadAttention", "CausalSelfAttention", "GroupedQueryAttention", "MultiQueryAttention"}:
             width, heads = cfg.get("d_model", 512), cfg.get("num_heads", 8)
             if not isinstance(width, int) or not isinstance(heads, int) or width < 1 or heads < 1 or width % heads:
@@ -184,6 +193,17 @@ def infer_shapes(graph: GraphDef, input_shape: list[int] | None = None) -> dict[
                     break
                 product *= d
             shapes[node.id] = list(x[:start]) + [product]
+        elif kind == "Architecture" and x:
+            architecture = cfg.get("architecture")
+            ac = cfg.get("config", {})
+            if architecture == "mlp" and len(x) >= 2:
+                shapes[node.id] = list(x[:-1]) + [ac.get("output_dim", 10)]
+            elif architecture == "decoder_transformer_lm" and len(x) == 2:
+                shapes[node.id] = list(x) + [ac.get("vocab_size", 256)]
+            elif architecture in {"vit_classifier", "cnn_classifier"} and len(x) == 4:
+                shapes[node.id] = [x[0], ac.get("num_classes", 10)]
+            else:
+                shapes[node.id] = None
         elif kind in {"LayerNorm", "RMSNorm", "Dropout", "Identity", "ReLU", "GELU", "SiLU", "Sigmoid", "Tanh", "Softmax", "MultiHeadAttention", "CausalSelfAttention", "GroupedQueryAttention", "MultiQueryAttention", "FlashAttention", "PreNormTransformerBlock", "TransformerEncoder", "VisionTransformerBlock", "MLP", "FeedForward", "SwiGLU", "LayerScale", "RotaryPositionEmbedding", "SinusoidalPositionEmbedding", "LearnedPositionEmbedding"}:
             shapes[node.id] = x
         else:
@@ -225,6 +245,11 @@ class CompiledGraph(nn.Module):
             elif t == "ReLU": modules[self.keys[n.id]] = nn.ReLU()
             elif t == "SiLU": modules[self.keys[n.id]] = nn.SiLU()
             elif t == "Identity": modules[self.keys[n.id]] = nn.Identity()
+            elif t == "Architecture":
+                try:
+                    modules[self.keys[n.id]] = build_architecture(c.get("architecture"), c.get("config", {}))
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"Invalid architecture config on node '{n.id}': {exc}") from exc
             else: raise ValueError(f"Node '{n.id}' ({t}) is catalogued but not yet executable in this initial compiler.")
         self.modules_by_key = nn.ModuleDict(modules)
         self.incoming: dict[str, list[EdgeDef]] = defaultdict(list)
@@ -268,6 +293,12 @@ def health():
 @app.get("/api/v1/nodes")
 def list_nodes():
     return {"count": len(CATALOG), "nodes": CATALOG}
+
+
+@app.get("/api/v1/architectures")
+def list_architectures():
+    """Return only reference architectures with executable builders and tests."""
+    return {"count": len(architecture_catalog()), "architectures": architecture_catalog()}
 
 
 @app.post("/api/v1/graphs/validate")

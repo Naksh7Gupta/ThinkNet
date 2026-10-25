@@ -3,7 +3,7 @@ import { CheckCircle2, Download, Play, ScanSearch } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 import {
   architectureGraph,
   exampleMlpGraph,
@@ -34,7 +34,7 @@ export function DesignerToolbar({
   const catalogByType = new Map(catalog.map((item) => [item.type, item]));
 
   function handleError(error: unknown) {
-    const message = error instanceof ApiError ? error.message : "Request failed.";
+    const message = error instanceof Error ? error.message : "An unexpected error occurred while processing the request.";
     setLastError(message);
   }
 
@@ -157,8 +157,10 @@ function ExportButton({ onError }: { onError: (error: unknown) => void }) {
       const link = document.createElement("a");
       link.href = url;
       link.download = data.filename || "exported_model.py";
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     },
     onError,
   });

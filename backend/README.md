@@ -109,3 +109,17 @@ Every entry from `GET /api/v1/nodes` now includes a category color and concrete 
 The node catalog includes a `status` field for every entry: `implemented-and-tested`, `partial`, or `metadata-only`. The compiler supports Input/Output, Linear/AutoLinear, Embedding/TokenEmbedding, LayerNorm/RMSNorm, BatchNorm1d, Dropout, common activations, Flatten/Reshape, Conv2d/MaxPool2d/GlobalAveragePool, Add/Multiply/ResidualAdd/Concat, Identity, and the four reference architectures through an Architecture node. A `partial` status means an execution path exists but broader acceptance coverage is still needed; metadata-only entries must not be treated as executable. Port typing, broad operator coverage (including advanced attention variants), full code generation, stronger schema validation, and CI remain follow-up work.
 
 Shape inference is advisory, not a proof of runtime compatibility. Always run a small inference test before training. Avoid executing generated code from untrusted sources without isolation.
+
+## Export graph architectures to Python
+
+Use `POST /api/v1/models/export` with the same graph JSON accepted by the compile endpoint. The API validates the graph and attempts to compile it before returning source:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/models/export \
+  -H "Content-Type: application/json" \
+  --data-binary @graph.json
+```
+
+The response contains `filename`, `python_source`, and graph counts. Save the returned `python_source` value as `exported_model.py`. It embeds the graph specification and defines `build_model()` plus a reusable `GeneratedThinkNetModel(nn.Module)` wrapper.
+
+**Scope:** this is a reproducible source export, not yet a standalone vendored implementation. The generated file imports ThinkNet's compiler, so run it from the repository root with the backend dependencies installed. This deliberately keeps exported behavior aligned with the tested graph engine. Nodes that are catalogued but not executable are rejected during export rather than producing misleading code. The exported file does not include trained weights; save/load checkpoints and a full training pipeline remain separate work.

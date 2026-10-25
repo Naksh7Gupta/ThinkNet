@@ -67,3 +67,16 @@ def test_codegen_embeds_graph_spec_as_json_string():
     serialized = ast.literal_eval(encoded_literal)
     parsed = json.loads(serialized)
     assert parsed["name"] == "exportable-mlp"
+
+
+def test_exported_source_executes_and_builds_a_working_model():
+    client = TestClient(app)
+    response = client.post("/api/v1/models/export", json=simple_graph())
+    assert response.status_code == 200, response.text
+    source = response.json()["python_source"]
+    namespace = {"__name__": "thinknet_export_runtime_test"}
+    exec(compile(source, "exported_model.py", "exec"), namespace)
+    model = namespace["build_model"]().eval()
+    with torch.no_grad():
+        output = model(torch.randn(2, 4))
+    assert tuple(output.shape) == (2, 3)

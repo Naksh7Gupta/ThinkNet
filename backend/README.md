@@ -106,7 +106,7 @@ Every entry from `GET /api/v1/nodes` now includes a category color and concrete 
 
 ## Scope and limitations
 
-The node catalog includes a `status` field for every entry: `implemented-and-tested`, `partial`, or `metadata-only`. The compiler supports Input/Output, Linear/AutoLinear, Embedding/TokenEmbedding, LayerNorm/RMSNorm, BatchNorm1d, Dropout, common activations, Flatten/Reshape, Conv2d/MaxPool2d/GlobalAveragePool, Add/Multiply/ResidualAdd/Concat, Identity, and the four reference architectures through an Architecture node. A `partial` status means an execution path exists but broader acceptance coverage is still needed; metadata-only entries must not be treated as executable. Port typing, broad operator coverage (including advanced attention variants), full code generation, stronger schema validation, and CI remain follow-up work.
+The node catalog includes a `status` field for every entry: `implemented-and-tested`, `partial`, or `metadata-only`. The compiler supports Input/Output, Linear/AutoLinear, Embedding/TokenEmbedding, LayerNorm/RMSNorm, BatchNorm1d, Dropout, common activations, Flatten/Reshape, Conv2d/MaxPool2d/GlobalAveragePool, Add/Multiply/ResidualAdd/Concat, Identity, MultiHeadAttention, CausalSelfAttention, PreNormTransformerBlock, MLP/FeedForward, SwiGLU, learned and sinusoidal position embeddings, LayerScale, and the four reference architectures through an Architecture node. A `partial` status means an execution path exists but broader acceptance coverage is still needed; metadata-only entries must not be treated as executable. Port typing, broader operator coverage (including advanced attention variants), a fully standalone export, stronger schema validation, and a complete training workflow remain follow-up work.
 
 Shape inference is advisory, not a proof of runtime compatibility. Always run a small inference test before training. Avoid executing generated code from untrusted sources without isolation.
 
@@ -123,3 +123,10 @@ curl -X POST http://127.0.0.1:8000/api/v1/models/export \
 The response contains `filename`, `python_source`, and graph counts. Save the returned `python_source` value as `exported_model.py`. It embeds the graph specification and defines `build_model()` plus a reusable `GeneratedThinkNetModel(nn.Module)` wrapper.
 
 **Scope:** this is a reproducible source export, not yet a standalone vendored implementation. The generated file imports ThinkNet's compiler, so run it from the repository root with the backend dependencies installed. This deliberately keeps exported behavior aligned with the tested graph engine. Nodes that are catalogued but not executable are rejected during export rather than producing misleading code. The exported file does not include trained weights; save/load checkpoints and a full training pipeline remain separate work.
+
+
+### Executable node coverage update
+
+The graph compiler now has tested execution paths for batch-first multi-head self-attention (causal and non-causal), a pre-norm transformer block, feed-forward/MLP, SwiGLU, learned and sinusoidal positional embeddings, and LayerScale. The CPU tests run each node on a real tensor and check shape and finite outputs. This does not imply that every node shown in the catalog is executable; check each node's `status` field.
+
+The export endpoint is also tested by parsing and executing the generated Python, building the exported model, and running a forward pass. The current export still depends on ThinkNet's backend package and does not include trained weights; it is not yet a self-contained, standalone file.

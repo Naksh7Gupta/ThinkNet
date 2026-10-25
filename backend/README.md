@@ -33,7 +33,10 @@ The source file is standalone at `backend/thinknet_backend_core.py`; run Uvicorn
 - `GET /api/v1/nodes` — node catalog for the GUI's "+" menus
 - `POST /api/v1/graphs/validate` — validate graph structure/configuration
 - `POST /api/v1/graphs/infer-shapes` — best-effort shape preview
-- `POST /api/v1/models/compile` — compile the currently supported execution subset
+- `POST /api/v1/models/compile` — compile a graph and return a process-local `model_id`
+- `POST /api/v1/models/quantize` — create a new model handle from an existing compiled model using the selected dtype
+- `GET /api/v1/models/{model_id}` — inspect a stored model handle
+- `DELETE /api/v1/models/{model_id}` — release a model handle from memory
 
 For the shape-preview endpoint, the current handler accepts a body containing both `payload` (the graph object) and optional `input_shape`, e.g. `{ "payload": { ...graph... }, "input_shape": [2, 24] }`.
 
@@ -76,6 +79,30 @@ Connect an `Input` node to the `Architecture` node and then to an `Output` node.
 - The architecture integration tests execute all four presets through `CompiledGraph` on CPU.
 
 This is graph-level execution integration; it does not yet provide a persistent model registry, training-job API, dataset pipeline, or full visual-node implementation.
+
+## Model quantization node
+
+The `Quantizer` is a **model-transform** node: its input is a compiled model, its configuration requests an output dtype, and its output is a new model handle. It is intentionally not a tensor activation node, so add it to the model-operations stage rather than as an edge in the tensor graph.
+
+1. Compile a valid graph with `POST /api/v1/models/compile`; the response includes `model_id`.
+2. Request `POST /api/v1/models/quantize` with `{"model_id":"<source-id>","dtype":"int8"}`.
+3. The response returns a different `model_id` for the transformed model. The source model remains unchanged.
+4. Call `DELETE /api/v1/models/{model_id}` when either model handle is no longer needed.
+
+Supported output choices:
+- `int8`: dynamic INT8 quantization for `nn.Linear` modules. Non-Linear layers are not claimed to be INT8.
+- `float16`: converts floating parameters and buffers to FP16.
+- `bfloat16`: converts floating parameters and buffers to BF16.
+
+FP16/BF16 inputs at inference time must use a compatible dtype; benchmark the target device and validate outputs before deployment. Model handles are stored in process memory and are lost on backend restart; this is an initial local workflow, not persistent storage.
+
+## Node layout metadata
+
+Every entry from `GET /api/v1/nodes` now includes a category color and concrete `size`, `width`, and `height` values for the canvas. Simple layers and `LMHead` use compact geometry; composite/model-level operations are larger. The `Quantizer` uses a larger, orange-highlighted shape so it reads as a model transformation. Category colors give related operations a consistent visual family.
+
+## Residual connections
+
+`ResidualAdd` is an executable two-input merge. Connect the main branch and the skip branch to it; both tensors must have compatible shapes. It computes `main + skip`, enabling residual blocks with a branch from an earlier node. Shape preview is advisory, so runtime tensor shapes must still be tested.
 
 ## Scope and limitations
 

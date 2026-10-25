@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from typing import Any
+from uuid import uuid4
 
 import torch
 from torch import nn
@@ -10,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.thinknet_architectures import architecture_catalog, build_architecture
+from backend.thinknet_quantization import QuantizerNode, quantization_report, SUPPORTED_DTYPES
 
 
 # User-editable catalog metadata. Each entry can be surfaced in the GUI's "+" menu.
@@ -35,6 +37,7 @@ NODE_CATALOG = [
     ("VisionTransformerBlock", "Vision"), ("GlobalAveragePool", "Vision"),
     ("Conv2d", "Vision"), ("MaxPool2d", "Vision"), ("Flatten", "Shape"),
     ("Reshape", "Shape"), ("MeanPool", "Shape"), ("Architecture", "Architecture"),
+    ("Quantizer", "Model Transform"), ("LMHead", "Language Model"),
 ]
 # "partial" means an execution path exists but the node still needs broader
 # acceptance coverage; "metadata-only" means it must not be treated as executable.
@@ -64,14 +67,74 @@ NODE_IMPLEMENTATION_STATUS = {
     "Add": "implemented-and-tested",
     "Multiply": "partial",
     "Concat": "implemented-and-tested",
-    "ResidualAdd": "partial",
+    "ResidualAdd": "implemented-and-tested",
     "Architecture": "implemented-and-tested",
+    "Quantizer": "implemented-and-tested",
+    "LMHead": "implemented-and-tested",
 }
-CATALOG = [
-    {"type": name, "category": category,
-     "status": NODE_IMPLEMENTATION_STATUS.get(name, "metadata-only")}
-    for name, category in NODE_CATALOG
-]
+
+CATEGORY_COLORS = {
+    "I/O": "#64748B", "Utility": "#94A3B8", "Core": "#3B82F6",
+    "Embedding": "#8B5CF6", "Position": "#A855F7", "Normalization": "#14B8A6",
+    "Regularization": "#F59E0B", "Activation": "#10B981", "FFN": "#6366F1",
+    "Attention": "#EC4899", "Merge": "#F97316", "Transformer": "#D97706",
+    "Vision": "#0891B2", "Shape": "#0EA5E9", "Architecture": "#475569",
+    "Model Transform": "#EA580C", "Language Model": "#7C3AED",
+}
+SMALL_NODES = {
+    "Input", "Output", "Identity", "Linear", "AutoLinear", "LMHead",
+    "LayerNorm", "RMSNorm", "BatchNorm1d", "Dropout", "ReLU", "GELU",
+    "SiLU", "Sigmoid", "Tanh", "Softmax", "Add", "Multiply", "ResidualAdd",
+}
+LARGE_NODES = {
+    "Architecture", "Quantizer", "MLP", "FeedForward", "SwiGLU",
+    "MultiHeadAttention", "CausalSelfAttention", "CrossAttention",
+    "GroupedQueryAttention", "MultiQueryAttention", "AdditiveAttention",
+    "LinearAttention", "ScaledDotProductAttention", "FlashAttention",
+    "PreNormTransformerBlock", "TransformerEncoder", "VisionTransformerBlock",
+}
+NODE_GEOMETRY = {
+    "small": {"width": 136, "height": 64},
+    "medium": {"width": 176, "height": 82},
+    "large": {"width": 216, "height": 104},
+}
+NODE_GEOMETRY_OVERRIDES = {
+    "Architecture": {"width": 224, "height": 112},
+    "Quantizer": {"width": 252, "height": 132},
+    "LMHead": {"width": 144, "height": 62},
+}
+NODE_COLOR_OVERRIDES = {"Quantizer": "#EA580C", "LMHead": "#7C3AED"}
+
+
+def _catalog_entry(name: str, category: str) -> dict[str, Any]:
+    size = "small" if name in SMALL_NODES else "large" if name in LARGE_NODES else "medium"
+    geometry = {**NODE_GEOMETRY[size], **NODE_GEOMETRY_OVERRIDES.get(name, {})}
+    entry: dict[str, Any] = {
+        "type": name, "category": category,
+        "status": NODE_IMPLEMENTATION_STATUS.get(name, "metadata-only"),
+        "size": size, **geometry,
+        "color": NODE_COLOR_OVERRIDES.get(name, CATEGORY_COLORS.get(category, "#64748B")),
+        "input_kind": "tensor", "output_kind": "tensor",
+        "execution_domain": "tensor-graph",
+    }
+    if name == "Quantizer":
+        entry.update({
+            "input_kind": "model", "output_kind": "quantized-model",
+            "execution_domain": "model-transform",
+            "config_fields": [{
+                "name": "dtype", "label": "Output dtype", "type": "select",
+                "required": True, "default": "int8",
+                "options": [
+                    {"label": "INT8 (dynamic Linear quantization)", "value": "int8"},
+                    {"label": "Float16", "value": "float16"},
+                    {"label": "BFloat16", "value": "bfloat16"},
+                ],
+            }],
+        })
+    return entry
+
+
+CATALOG = [_catalog_entry(name, category) for name, category in NODE_CATALOG]
 
 
 class NodeDef(BaseModel):
@@ -134,6 +197,19 @@ def validate_graph(graph: GraphDef) -> list[str]:
                 errors.append(f"Input '{node.id}' dimensions must be positive integers; -1 is allowed for one variable dimension.")
             elif sum(d == -1 for d in shape) > 1:
                 errors.append(f"Input '{node.id}' may contain at most one -1 dimension.")
+        if node.type == "Quantizer":
+            dtype = cfg.get("dtype", "int8")
+            if dtype not in SUPPORTED_DTYPES:
+                errors.append(f"Node '{node.id}': dtype must be one of {SUPPORTED_DTYPES}.")
+            errors.append(
+                f"Node '{node.id}' is a model-transform operation, not a tensor graph operation. "
+                "Compile the model first, then call POST /api/v1/models/quantize."
+            )
+        if node.type == "LMHead":
+            in_features = cfg.get("in_features", cfg.get("d_model", 128))
+            out_features = cfg.get("vocab_size", cfg.get("out_features", 256))
+            if any(isinstance(v, bool) or not isinstance(v, int) or v < 1 for v in (in_features, out_features)):
+                errors.append(f"Node '{node.id}': LMHead input width and vocabulary/output width must be positive integers.")
         if node.type == "Architecture":
             architecture_name = cfg.get("architecture")
             supported = {item["name"] for item in architecture_catalog()}
@@ -203,6 +279,10 @@ def infer_shapes(graph: GraphDef, input_shape: list[int] | None = None) -> dict[
         elif kind in {"Linear", "AutoLinear"} and x:
             result = list(x)
             result[-1] = cfg.get("out_features", 128)
+            shapes[node.id] = result
+        elif kind == "LMHead" and x:
+            result = list(x)
+            result[-1] = cfg.get("vocab_size", cfg.get("out_features", 256))
             shapes[node.id] = result
         elif kind in {"Embedding", "TokenEmbedding"} and x:
             width = cfg.get("embedding_dim", cfg.get("d_model", 128))
@@ -314,6 +394,12 @@ class CompiledGraph(nn.Module):
                 continue  # Merge operations are evaluated directly in forward().
             if t == "Linear":
                 modules[self.keys[n.id]] = nn.Linear(c.get("in_features", 128), c.get("out_features", 128), bias=c.get("bias", True))
+            elif t == "LMHead":
+                modules[self.keys[n.id]] = nn.Linear(
+                    c.get("in_features", c.get("d_model", 128)),
+                    c.get("vocab_size", c.get("out_features", 256)),
+                    bias=c.get("bias", False),
+                )
             elif t == "AutoLinear":
                 modules[self.keys[n.id]] = nn.LazyLinear(c.get("out_features", 128), bias=c.get("bias", True))
             elif t == "LayerNorm":
@@ -383,7 +469,29 @@ class CompiledGraph(nn.Module):
         return outputs[0] if len(outputs) == 1 else tuple(outputs)
 
 
-app = FastAPI(title="ThinkNet Architecture Backend", version="0.2.0")
+app = FastAPI(title="ThinkNet Architecture Backend", version="0.3.0")
+
+# Compiled model handles are process-local; restart clears them.
+MODEL_STORE: dict[str, nn.Module] = {}
+
+
+class QuantizationRequest(BaseModel):
+    model_id: str = Field(min_length=1, max_length=100)
+    dtype: str = Field(min_length=1, max_length=20)
+
+
+def _logical_parameter_count(model: nn.Module) -> int:
+    """Count ordinary parameters plus weights packed inside dynamic INT8 Linear modules."""
+    total = sum(parameter.numel() for parameter in model.parameters())
+    for module in model.modules():
+        module_path = type(module).__module__.lower()
+        if "quantized.dynamic" in module_path and "linear" in module_path:
+            weight = module.weight()
+            bias = module.bias()
+            total += weight.numel()
+            if bias is not None:
+                total += bias.numel()
+    return total
 
 
 @app.get("/health")
@@ -401,6 +509,53 @@ def list_nodes():
 def list_architectures():
     """Return only reference architectures with executable builders and tests."""
     return {"count": len(architecture_catalog()), "architectures": architecture_catalog()}
+
+
+@app.post("/api/v1/models/quantize")
+def quantize_compiled_model(payload: QuantizationRequest):
+    """Return a new model handle transformed using the requested dtype."""
+    try:
+        transform = QuantizerNode(dtype=payload.dtype)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    source = MODEL_STORE.get(payload.model_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail=f"Unknown model_id '{payload.model_id}'.")
+    try:
+        result = transform(source)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    new_model_id = uuid4().hex
+    MODEL_STORE[new_model_id] = result
+    return {
+        "quantized": True,
+        "model_id": new_model_id,
+        "source_model_id": payload.model_id,
+        "dtype": payload.dtype,
+        "parameter_count": _logical_parameter_count(result),
+        "report": quantization_report(result, payload.dtype),
+        "note": "This new model handle is in-memory and is lost when the backend process restarts.",
+    }
+
+
+@app.get("/api/v1/models/{model_id}")
+def get_model_metadata(model_id: str):
+    model = MODEL_STORE.get(model_id)
+    if model is None:
+        raise HTTPException(status_code=404, detail=f"Unknown model_id '{model_id}'.")
+    return {
+        "model_id": model_id,
+        "parameter_count": _logical_parameter_count(model),
+        "training": model.training,
+        "module_count": sum(1 for _ in model.modules()),
+    }
+
+
+@app.delete("/api/v1/models/{model_id}")
+def delete_model(model_id: str):
+    if MODEL_STORE.pop(model_id, None) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown model_id '{model_id}'.")
+    return {"deleted": True, "model_id": model_id}
 
 
 @app.post("/api/v1/graphs/validate")
@@ -423,7 +578,11 @@ def compile_model(payload: GraphDef):
     if errors: raise HTTPException(status_code=400, detail={"errors": errors})
     try:
         model = CompiledGraph(payload).eval()
-        return {"compiled": True, "parameter_count": sum(p.numel() for p in model.parameters()),
-                "shape_preview": infer_shapes(payload)}
+        model_id = uuid4().hex
+        MODEL_STORE[model_id] = model
+        return {"compiled": True, "model_id": model_id,
+                "parameter_count": _logical_parameter_count(model),
+                "shape_preview": infer_shapes(payload),
+                "note": "This model handle is in-memory and is lost when the backend process restarts."}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))

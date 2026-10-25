@@ -36,7 +36,42 @@ NODE_CATALOG = [
     ("Conv2d", "Vision"), ("MaxPool2d", "Vision"), ("Flatten", "Shape"),
     ("Reshape", "Shape"), ("MeanPool", "Shape"), ("Architecture", "Architecture"),
 ]
-CATALOG = [{"type": name, "category": category} for name, category in NODE_CATALOG]
+# "partial" means an execution path exists but the node still needs broader
+# acceptance coverage; "metadata-only" means it must not be treated as executable.
+NODE_IMPLEMENTATION_STATUS = {
+    "Input": "implemented-and-tested",
+    "Output": "implemented-and-tested",
+    "Identity": "implemented-and-tested",
+    "Linear": "implemented-and-tested",
+    "Embedding": "implemented-and-tested",
+    "TokenEmbedding": "implemented-and-tested",
+    "BatchNorm1d": "implemented-and-tested",
+    "Dropout": "partial",
+    "ReLU": "partial",
+    "GELU": "partial",
+    "SiLU": "partial",
+    "Sigmoid": "partial",
+    "Tanh": "partial",
+    "Softmax": "implemented-and-tested",
+    "AutoLinear": "partial",
+    "LayerNorm": "partial",
+    "RMSNorm": "partial",
+    "Conv2d": "partial",
+    "MaxPool2d": "partial",
+    "GlobalAveragePool": "partial",
+    "Flatten": "implemented-and-tested",
+    "Reshape": "implemented-and-tested",
+    "Add": "implemented-and-tested",
+    "Multiply": "partial",
+    "Concat": "implemented-and-tested",
+    "ResidualAdd": "partial",
+    "Architecture": "implemented-and-tested",
+}
+CATALOG = [
+    {"type": name, "category": category,
+     "status": NODE_IMPLEMENTATION_STATUS.get(name, "metadata-only")}
+    for name, category in NODE_CATALOG
+]
 
 
 class NodeDef(BaseModel):
@@ -358,6 +393,7 @@ def health():
 
 @app.get("/api/v1/nodes")
 def list_nodes():
+    """Return catalog metadata with explicit execution status for every node."""
     return {"count": len(CATALOG), "nodes": CATALOG}
 
 

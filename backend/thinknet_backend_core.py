@@ -9,6 +9,8 @@ from torch import nn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.thinknet_architectures import architecture_catalog, build_architecture
+
 
 # User-editable catalog metadata. Each entry can be surfaced in the GUI's "+" menu.
 NODE_CATALOG = [
@@ -32,9 +34,44 @@ NODE_CATALOG = [
     ("PatchEmbedding", "Vision"), ("ClassToken", "Vision"),
     ("VisionTransformerBlock", "Vision"), ("GlobalAveragePool", "Vision"),
     ("Conv2d", "Vision"), ("MaxPool2d", "Vision"), ("Flatten", "Shape"),
-    ("Reshape", "Shape"), ("MeanPool", "Shape"),
+    ("Reshape", "Shape"), ("MeanPool", "Shape"), ("Architecture", "Architecture"),
 ]
-CATALOG = [{"type": name, "category": category} for name, category in NODE_CATALOG]
+# "partial" means an execution path exists but the node still needs broader
+# acceptance coverage; "metadata-only" means it must not be treated as executable.
+NODE_IMPLEMENTATION_STATUS = {
+    "Input": "implemented-and-tested",
+    "Output": "implemented-and-tested",
+    "Identity": "implemented-and-tested",
+    "Linear": "implemented-and-tested",
+    "Embedding": "implemented-and-tested",
+    "TokenEmbedding": "implemented-and-tested",
+    "BatchNorm1d": "implemented-and-tested",
+    "Dropout": "partial",
+    "ReLU": "partial",
+    "GELU": "partial",
+    "SiLU": "partial",
+    "Sigmoid": "partial",
+    "Tanh": "partial",
+    "Softmax": "implemented-and-tested",
+    "AutoLinear": "partial",
+    "LayerNorm": "partial",
+    "RMSNorm": "partial",
+    "Conv2d": "partial",
+    "MaxPool2d": "partial",
+    "GlobalAveragePool": "partial",
+    "Flatten": "implemented-and-tested",
+    "Reshape": "implemented-and-tested",
+    "Add": "implemented-and-tested",
+    "Multiply": "partial",
+    "Concat": "implemented-and-tested",
+    "ResidualAdd": "partial",
+    "Architecture": "implemented-and-tested",
+}
+CATALOG = [
+    {"type": name, "category": category,
+     "status": NODE_IMPLEMENTATION_STATUS.get(name, "metadata-only")}
+    for name, category in NODE_CATALOG
+]
 
 
 class NodeDef(BaseModel):
@@ -97,6 +134,13 @@ def validate_graph(graph: GraphDef) -> list[str]:
                 errors.append(f"Input '{node.id}' dimensions must be positive integers; -1 is allowed for one variable dimension.")
             elif sum(d == -1 for d in shape) > 1:
                 errors.append(f"Input '{node.id}' may contain at most one -1 dimension.")
+        if node.type == "Architecture":
+            architecture_name = cfg.get("architecture")
+            supported = {item["name"] for item in architecture_catalog()}
+            if not isinstance(architecture_name, str) or architecture_name not in supported:
+                errors.append(f"Node '{node.id}': config.architecture must be one of the supported architecture names.")
+            if not isinstance(cfg.get("config", {}), dict):
+                errors.append(f"Node '{node.id}': config.config must be an object.")
         if node.type in {"MultiHeadAttention", "CausalSelfAttention", "GroupedQueryAttention", "MultiQueryAttention"}:
             width, heads = cfg.get("d_model", 512), cfg.get("num_heads", 8)
             if not isinstance(width, int) or not isinstance(heads, int) or width < 1 or heads < 1 or width % heads:
@@ -119,6 +163,14 @@ def validate_graph(graph: GraphDef) -> list[str]:
     for node in graph.nodes:
         if node.type not in {"Input"} and not incoming[node.id]:
             errors.append(f"Node '{node.id}' has no incoming edge.")
+        if node.type in {"Add", "Multiply", "ResidualAdd"} and len(incoming[node.id]) != 2:
+            errors.append(f"Node '{node.id}' ({node.type}) requires exactly two incoming edges.")
+        if node.type == "Concat" and len(incoming[node.id]) < 2:
+            errors.append(f"Node '{node.id}' (Concat) requires at least two incoming edges.")
+        if node.type == "Reshape":
+            target_shape = node.config.get("shape")
+            if not isinstance(target_shape, list) or not target_shape or any(not isinstance(d, int) or d == 0 or d < -1 for d in target_shape) or sum(d == -1 for d in target_shape) > 1:
+                errors.append(f"Node '{node.id}': Reshape config.shape must be a non-empty list of non-zero integers with at most one -1.")
     edge_keys = [(e.source, e.source_port, e.target, e.target_port) for e in graph.edges]
     if len(edge_keys) != len(set(edge_keys)):
         errors.append("Duplicate edges are unsupported.")
@@ -153,7 +205,7 @@ def infer_shapes(graph: GraphDef, input_shape: list[int] | None = None) -> dict[
             result[-1] = cfg.get("out_features", 128)
             shapes[node.id] = result
         elif kind in {"Embedding", "TokenEmbedding"} and x:
-            width = cfg.get("embedding_dim", cfg.get("d_model", 512))
+            width = cfg.get("embedding_dim", cfg.get("d_model", 128))
             shapes[node.id] = list(x) + [width]
         elif kind in {"Add", "Multiply", "ResidualAdd"}:
             shapes[node.id] = x if len(source_shapes) < 2 or source_shapes[1] == x else None
@@ -175,16 +227,53 @@ def infer_shapes(graph: GraphDef, input_shape: list[int] | None = None) -> dict[
             shapes[node.id] = result
         elif kind == "Flatten" and x:
             start = cfg.get("start_dim", 1)
+            end = cfg.get("end_dim", -1)
             start = start if start >= 0 else len(x) + start
-            dims = x[start:]
+            end = end if end >= 0 else len(x) + end
+            dims = x[start:end + 1]
             product = 1
             for d in dims:
                 if d is None:
                     product = None
                     break
                 product *= d
-            shapes[node.id] = list(x[:start]) + [product]
-        elif kind in {"LayerNorm", "RMSNorm", "Dropout", "Identity", "ReLU", "GELU", "SiLU", "Sigmoid", "Tanh", "Softmax", "MultiHeadAttention", "CausalSelfAttention", "GroupedQueryAttention", "MultiQueryAttention", "FlashAttention", "PreNormTransformerBlock", "TransformerEncoder", "VisionTransformerBlock", "MLP", "FeedForward", "SwiGLU", "LayerScale", "RotaryPositionEmbedding", "SinusoidalPositionEmbedding", "LearnedPositionEmbedding"}:
+            shapes[node.id] = list(x[:start]) + [product] + list(x[end + 1:])
+        elif kind == "Reshape" and x:
+            target = cfg.get("shape", [])
+            if len(target) and sum(d == -1 for d in target) <= 1:
+                shapes[node.id] = [x[0]] + [None if d == -1 else d for d in target]
+            else:
+                shapes[node.id] = None
+        elif kind == "GlobalAveragePool" and x and len(x) == 4:
+            shapes[node.id] = [x[0], x[1]]
+        elif kind == "Conv2d" and x and len(x) == 4:
+            kernel = cfg.get("kernel_size", 3)
+            stride = cfg.get("stride", 1)
+            padding = cfg.get("padding", 0)
+            kernel = kernel[0] if isinstance(kernel, list) else kernel
+            stride = stride[0] if isinstance(stride, list) else stride
+            padding = padding[0] if isinstance(padding, list) else padding
+            h = None if x[2] is None else (x[2] + 2 * padding - kernel) // stride + 1
+            w = None if x[3] is None else (x[3] + 2 * padding - kernel) // stride + 1
+            shapes[node.id] = [x[0], cfg.get("out_channels", 16), h, w]
+        elif kind == "MaxPool2d" and x and len(x) == 4:
+            kernel = cfg.get("kernel_size", 2)
+            stride = cfg.get("stride", kernel)
+            kernel = kernel[0] if isinstance(kernel, list) else kernel
+            stride = stride[0] if isinstance(stride, list) else stride
+            shapes[node.id] = [x[0], x[1], None if x[2] is None else (x[2] - kernel) // stride + 1, None if x[3] is None else (x[3] - kernel) // stride + 1]
+        elif kind == "Architecture" and x:
+            architecture = cfg.get("architecture")
+            ac = cfg.get("config", {})
+            if architecture == "mlp" and len(x) >= 2:
+                shapes[node.id] = list(x[:-1]) + [ac.get("output_dim", 10)]
+            elif architecture == "decoder_transformer_lm" and len(x) == 2:
+                shapes[node.id] = list(x) + [ac.get("vocab_size", 256)]
+            elif architecture in {"vit_classifier", "cnn_classifier"} and len(x) == 4:
+                shapes[node.id] = [x[0], ac.get("num_classes", 10)]
+            else:
+                shapes[node.id] = None
+        elif kind in {"LayerNorm", "RMSNorm", "BatchNorm1d", "Dropout", "Identity", "ReLU", "GELU", "SiLU", "Sigmoid", "Tanh", "Softmax", "MultiHeadAttention", "CausalSelfAttention", "GroupedQueryAttention", "MultiQueryAttention", "FlashAttention", "PreNormTransformerBlock", "TransformerEncoder", "VisionTransformerBlock", "MLP", "FeedForward", "SwiGLU", "LayerScale", "RotaryPositionEmbedding", "SinusoidalPositionEmbedding", "LearnedPositionEmbedding"}:
             shapes[node.id] = x
         else:
             shapes[node.id] = None
@@ -200,6 +289,16 @@ class _MLP(nn.Module):
         return self.layers(x)
 
 
+class _Reshape(nn.Module):
+    """Reshape each sample while preserving the leading batch dimension."""
+    def __init__(self, shape: list[int]):
+        super().__init__()
+        self.shape = tuple(shape)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x.reshape(x.shape[0], *self.shape)
+
+
 class CompiledGraph(nn.Module):
     """Initial executable subset; architecture nodes are expanded incrementally."""
     def __init__(self, graph: GraphDef):
@@ -211,6 +310,8 @@ class CompiledGraph(nn.Module):
         modules = {}
         for n in nodes:
             c, t = n.config, n.type
+            if t in {"Add", "Multiply", "ResidualAdd", "Concat"}:
+                continue  # Merge operations are evaluated directly in forward().
             if t == "Linear":
                 modules[self.keys[n.id]] = nn.Linear(c.get("in_features", 128), c.get("out_features", 128), bias=c.get("bias", True))
             elif t == "AutoLinear":
@@ -219,12 +320,34 @@ class CompiledGraph(nn.Module):
                 modules[self.keys[n.id]] = nn.LayerNorm(c.get("normalized_shape", 512), eps=c.get("eps", 1e-5))
             elif t == "RMSNorm":
                 modules[self.keys[n.id]] = nn.RMSNorm(c.get("normalized_shape", 512), eps=c.get("eps", 1e-6))
+            elif t in {"Embedding", "TokenEmbedding"}:
+                modules[self.keys[n.id]] = nn.Embedding(c.get("num_embeddings", c.get("vocab_size", 1000)), c.get("embedding_dim", c.get("d_model", 128)))
+            elif t == "BatchNorm1d":
+                modules[self.keys[n.id]] = nn.BatchNorm1d(c.get("num_features", c.get("features", 128)))
+            elif t == "Conv2d":
+                modules[self.keys[n.id]] = nn.Conv2d(c.get("in_channels", 3), c.get("out_channels", 16), c.get("kernel_size", 3), stride=c.get("stride", 1), padding=c.get("padding", 0), bias=c.get("bias", True))
+            elif t == "MaxPool2d":
+                modules[self.keys[n.id]] = nn.MaxPool2d(c.get("kernel_size", 2), stride=c.get("stride", c.get("kernel_size", 2)), padding=c.get("padding", 0))
+            elif t == "GlobalAveragePool":
+                modules[self.keys[n.id]] = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(start_dim=1))
+            elif t == "Flatten":
+                modules[self.keys[n.id]] = nn.Flatten(start_dim=c.get("start_dim", 1), end_dim=c.get("end_dim", -1))
+            elif t == "Reshape":
+                modules[self.keys[n.id]] = _Reshape(c["shape"])
+            elif t == "Sigmoid": modules[self.keys[n.id]] = nn.Sigmoid()
+            elif t == "Tanh": modules[self.keys[n.id]] = nn.Tanh()
+            elif t == "Softmax": modules[self.keys[n.id]] = nn.Softmax(dim=c.get("dim", -1))
             elif t == "Dropout":
                 modules[self.keys[n.id]] = nn.Dropout(c.get("p", 0.1))
             elif t == "GELU": modules[self.keys[n.id]] = nn.GELU()
             elif t == "ReLU": modules[self.keys[n.id]] = nn.ReLU()
             elif t == "SiLU": modules[self.keys[n.id]] = nn.SiLU()
             elif t == "Identity": modules[self.keys[n.id]] = nn.Identity()
+            elif t == "Architecture":
+                try:
+                    modules[self.keys[n.id]] = build_architecture(c.get("architecture"), c.get("config", {}))
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"Invalid architecture config on node '{n.id}': {exc}") from exc
             else: raise ValueError(f"Node '{n.id}' ({t}) is catalogued but not yet executable in this initial compiler.")
         self.modules_by_key = nn.ModuleDict(modules)
         self.incoming: dict[str, list[EdgeDef]] = defaultdict(list)
@@ -251,6 +374,9 @@ class CompiledGraph(nn.Module):
             elif node.type in {"Add", "Multiply", "ResidualAdd"}:
                 if len(edge_values) != 2: raise ValueError(f"{node.type} needs two incoming tensors.")
                 values[node.id] = edge_values[0] + edge_values[1] if node.type != "Multiply" else edge_values[0] * edge_values[1]
+            elif node.type == "Concat":
+                dim = node.config.get("dim", -1)
+                values[node.id] = torch.cat(edge_values, dim=dim)
             else:
                 values[node.id] = self.modules_by_key[self.keys[node.id]](edge_values[0])
         outputs = [values[n.id] for n in self.graph.nodes if n.type == "Output"]
@@ -267,7 +393,14 @@ def health():
 
 @app.get("/api/v1/nodes")
 def list_nodes():
+    """Return catalog metadata with explicit execution status for every node."""
     return {"count": len(CATALOG), "nodes": CATALOG}
+
+
+@app.get("/api/v1/architectures")
+def list_architectures():
+    """Return only reference architectures with executable builders and tests."""
+    return {"count": len(architecture_catalog()), "architectures": architecture_catalog()}
 
 
 @app.post("/api/v1/graphs/validate")

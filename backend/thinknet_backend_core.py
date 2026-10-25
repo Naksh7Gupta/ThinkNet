@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.thinknet_architectures import architecture_catalog, build_architecture
-from backend.thinknet_quantization import QuantizerNode, quantize_model, quantization_report, SUPPORTED_DTYPES
+from backend.thinknet_quantization import QuantizerNode, quantization_report, SUPPORTED_DTYPES
 
 
 # User-editable catalog metadata. Each entry can be surfaced in the GUI's "+" menu.

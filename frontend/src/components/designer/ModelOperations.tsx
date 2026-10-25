@@ -31,7 +31,7 @@ export function ModelOperations({ catalog }: { catalog: CatalogNode[] }) {
   const [dtype, setDtype] = useState(String(quantizer?.config_fields?.[0]?.default ?? "int8"));
 
   function handleError(error: unknown) {
-    setLastError(error instanceof ApiError ? error.message : "Request failed.");
+    setLastError(error instanceof Error ? error.message : "An unexpected error occurred while processing the request.");
   }
 
   const inspect = useMutation({
@@ -196,8 +196,10 @@ export function ModelOperations({ catalog }: { catalog: CatalogNode[] }) {
                   const link = document.createElement("a");
                   link.href = url;
                   link.download = exportResult.filename;
+                  document.body.appendChild(link);
                   link.click();
-                  URL.revokeObjectURL(url);
+                  link.remove();
+                  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
                 }}
               >
                 Download {exportResult.filename}

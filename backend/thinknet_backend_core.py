@@ -128,6 +128,14 @@ def validate_graph(graph: GraphDef) -> list[str]:
     for node in graph.nodes:
         if node.type not in {"Input"} and not incoming[node.id]:
             errors.append(f"Node '{node.id}' has no incoming edge.")
+        if node.type in {"Add", "Multiply", "ResidualAdd"} and len(incoming[node.id]) != 2:
+            errors.append(f"Node '{node.id}' ({node.type}) requires exactly two incoming edges.")
+        if node.type == "Concat" and len(incoming[node.id]) < 2:
+            errors.append(f"Node '{node.id}' (Concat) requires at least two incoming edges.")
+        if node.type == "Reshape":
+            target_shape = node.config.get("shape")
+            if not isinstance(target_shape, list) or not target_shape or any(not isinstance(d, int) or d == 0 or d < -1 for d in target_shape) or sum(d == -1 for d in target_shape) > 1:
+                errors.append(f"Node '{node.id}': Reshape config.shape must be a non-empty list of non-zero integers with at most one -1.")
     edge_keys = [(e.source, e.source_port, e.target, e.target_port) for e in graph.edges]
     if len(edge_keys) != len(set(edge_keys)):
         errors.append("Duplicate edges are unsupported.")
@@ -184,15 +192,41 @@ def infer_shapes(graph: GraphDef, input_shape: list[int] | None = None) -> dict[
             shapes[node.id] = result
         elif kind == "Flatten" and x:
             start = cfg.get("start_dim", 1)
+            end = cfg.get("end_dim", -1)
             start = start if start >= 0 else len(x) + start
-            dims = x[start:]
+            end = end if end >= 0 else len(x) + end
+            dims = x[start:end + 1]
             product = 1
             for d in dims:
                 if d is None:
                     product = None
                     break
                 product *= d
-            shapes[node.id] = list(x[:start]) + [product]
+            shapes[node.id] = list(x[:start]) + [product] + list(x[end + 1:])
+        elif kind == "Reshape" and x:
+            target = cfg.get("shape", [])
+            if len(target) and sum(d == -1 for d in target) <= 1:
+                shapes[node.id] = [x[0]] + [None if d == -1 else d for d in target]
+            else:
+                shapes[node.id] = None
+        elif kind == "GlobalAveragePool" and x and len(x) == 4:
+            shapes[node.id] = [x[0], x[1]]
+        elif kind == "Conv2d" and x and len(x) == 4:
+            kernel = cfg.get("kernel_size", 3)
+            stride = cfg.get("stride", 1)
+            padding = cfg.get("padding", 0)
+            kernel = kernel[0] if isinstance(kernel, list) else kernel
+            stride = stride[0] if isinstance(stride, list) else stride
+            padding = padding[0] if isinstance(padding, list) else padding
+            h = None if x[2] is None else (x[2] + 2 * padding - kernel) // stride + 1
+            w = None if x[3] is None else (x[3] + 2 * padding - kernel) // stride + 1
+            shapes[node.id] = [x[0], cfg.get("out_channels", 16), h, w]
+        elif kind == "MaxPool2d" and x and len(x) == 4:
+            kernel = cfg.get("kernel_size", 2)
+            stride = cfg.get("stride", kernel)
+            kernel = kernel[0] if isinstance(kernel, list) else kernel
+            stride = stride[0] if isinstance(stride, list) else stride
+            shapes[node.id] = [x[0], x[1], None if x[2] is None else (x[2] - kernel) // stride + 1, None if x[3] is None else (x[3] - kernel) // stride + 1]
         elif kind == "Architecture" and x:
             architecture = cfg.get("architecture")
             ac = cfg.get("config", {})
@@ -220,6 +254,16 @@ class _MLP(nn.Module):
         return self.layers(x)
 
 
+class _Reshape(nn.Module):
+    """Reshape each sample while preserving the leading batch dimension."""
+    def __init__(self, shape: list[int]):
+        super().__init__()
+        self.shape = tuple(shape)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x.reshape(x.shape[0], *self.shape)
+
+
 class CompiledGraph(nn.Module):
     """Initial executable subset; architecture nodes are expanded incrementally."""
     def __init__(self, graph: GraphDef):
@@ -231,6 +275,8 @@ class CompiledGraph(nn.Module):
         modules = {}
         for n in nodes:
             c, t = n.config, n.type
+            if t in {"Add", "Multiply", "ResidualAdd", "Concat"}:
+                continue  # Merge operations are evaluated directly in forward().
             if t == "Linear":
                 modules[self.keys[n.id]] = nn.Linear(c.get("in_features", 128), c.get("out_features", 128), bias=c.get("bias", True))
             elif t == "AutoLinear":
@@ -239,6 +285,23 @@ class CompiledGraph(nn.Module):
                 modules[self.keys[n.id]] = nn.LayerNorm(c.get("normalized_shape", 512), eps=c.get("eps", 1e-5))
             elif t == "RMSNorm":
                 modules[self.keys[n.id]] = nn.RMSNorm(c.get("normalized_shape", 512), eps=c.get("eps", 1e-6))
+            elif t in {"Embedding", "TokenEmbedding"}:
+                modules[self.keys[n.id]] = nn.Embedding(c.get("num_embeddings", c.get("vocab_size", 1000)), c.get("embedding_dim", c.get("d_model", 128)))
+            elif t == "BatchNorm1d":
+                modules[self.keys[n.id]] = nn.BatchNorm1d(c.get("num_features", c.get("features", 128)))
+            elif t == "Conv2d":
+                modules[self.keys[n.id]] = nn.Conv2d(c.get("in_channels", 3), c.get("out_channels", 16), c.get("kernel_size", 3), stride=c.get("stride", 1), padding=c.get("padding", 0), bias=c.get("bias", True))
+            elif t == "MaxPool2d":
+                modules[self.keys[n.id]] = nn.MaxPool2d(c.get("kernel_size", 2), stride=c.get("stride", c.get("kernel_size", 2)), padding=c.get("padding", 0))
+            elif t == "GlobalAveragePool":
+                modules[self.keys[n.id]] = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(start_dim=1))
+            elif t == "Flatten":
+                modules[self.keys[n.id]] = nn.Flatten(start_dim=c.get("start_dim", 1), end_dim=c.get("end_dim", -1))
+            elif t == "Reshape":
+                modules[self.keys[n.id]] = _Reshape(c["shape"])
+            elif t == "Sigmoid": modules[self.keys[n.id]] = nn.Sigmoid()
+            elif t == "Tanh": modules[self.keys[n.id]] = nn.Tanh()
+            elif t == "Softmax": modules[self.keys[n.id]] = nn.Softmax(dim=c.get("dim", -1))
             elif t == "Dropout":
                 modules[self.keys[n.id]] = nn.Dropout(c.get("p", 0.1))
             elif t == "GELU": modules[self.keys[n.id]] = nn.GELU()
@@ -276,6 +339,9 @@ class CompiledGraph(nn.Module):
             elif node.type in {"Add", "Multiply", "ResidualAdd"}:
                 if len(edge_values) != 2: raise ValueError(f"{node.type} needs two incoming tensors.")
                 values[node.id] = edge_values[0] + edge_values[1] if node.type != "Multiply" else edge_values[0] * edge_values[1]
+            elif node.type == "Concat":
+                dim = node.config.get("dim", -1)
+                values[node.id] = torch.cat(edge_values, dim=dim)
             else:
                 values[node.id] = self.modules_by_key[self.keys[node.id]](edge_values[0])
         outputs = [values[n.id] for n in self.graph.nodes if n.type == "Output"]

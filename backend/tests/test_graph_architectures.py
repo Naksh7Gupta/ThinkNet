@@ -44,9 +44,7 @@ def test_reference_architecture_executes_inside_graph(
 ):
     graph = architecture_graph(sample_shape, architecture, config)
     assert validate_graph(graph) == []
-    assert infer_shapes(graph)["outputs"]["output"] == list(expected_shape[:1]) + (
-        [None] if expected_shape[0] == 2 else []
-    ) if False else infer_shapes(graph)["outputs"]["output"] is not None
+    assert infer_shapes(graph)["outputs"]["output"] == [None, *list(expected_shape[1:])]
 
     model = CompiledGraph(graph)
     x = input_factory()

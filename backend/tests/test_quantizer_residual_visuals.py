@@ -159,5 +159,5 @@ def test_quantize_api_rejects_unknown_dtype_and_missing_model():
         "/api/v1/models/quantize",
         json={"model_id": "missing-model", "dtype": "fp8"},
     )
-    # Model lookup happens before dtype validation in this API handler.
-    assert invalid.status_code == 404
+    assert invalid.status_code == 400
+    assert "Unsupported dtype" in invalid.json()["detail"]

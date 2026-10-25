@@ -2,24 +2,24 @@
 @import "@xyflow/react/dist/style.css";
 
 @theme {
-  --font-sans: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
+  --font-sans: "Inter", "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
   --font-mono: "Cascadia Code", "SFMono-Regular", ui-monospace, monospace;
-  --color-background: #f4f5f8;
-  --color-foreground: #16181d;
-  --color-card: #ffffff;
-  --color-card-foreground: #16181d;
-  --color-muted: #eef0f4;
-  --color-muted-foreground: #5f6774;
-  --color-border: #d9dee7;
-  --color-ring: #3b4f8a;
-  --color-primary: #1f3a8a;
-  --color-primary-foreground: #f8fafc;
-  --color-accent: #e8ecf4;
-  --color-accent-foreground: #1f3a8a;
-  --color-destructive: #b42318;
-  --color-success: #067647;
-  --color-warning: #b54708;
-  --radius-lg: 10px;
+  --color-background: #0b0d13;
+  --color-foreground: #e7e9f1;
+  --color-card: #131722;
+  --color-card-foreground: #e7e9f1;
+  --color-muted: #1b2030;
+  --color-muted-foreground: #8b93a7;
+  --color-border: #262c3f;
+  --color-ring: #7c6cf8;
+  --color-primary: #6d5df6;
+  --color-primary-foreground: #ffffff;
+  --color-accent: #1f2540;
+  --color-accent-foreground: #b4acff;
+  --color-destructive: #f0616d;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --radius-lg: 12px;
   --radius-md: 8px;
   --radius-sm: 6px;
 }
@@ -29,6 +29,10 @@ body,
 #root {
   height: 100%;
   margin: 0;
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
@@ -42,49 +46,76 @@ body {
   box-sizing: border-box;
 }
 
+/* Native selects sit on dark panels; keep them darker than the panel. */
+select {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+/* React Flow — dark canvas */
 .react-flow {
-  --xy-background-color: #eef1f6;
-  --xy-node-border-radius: 8px;
+  --xy-background-color: #0b0d13;
+  --xy-node-border-radius: 12px;
 }
 
 .react-flow__background {
-  background-color: #eef1f6 !important;
+  background-color: #0b0d13 !important;
 }
 
 .react-flow__minimap {
-  background: #fff !important;
+  background: #131722 !important;
   border: 1px solid var(--color-border) !important;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
 .react-flow__controls {
-  box-shadow: 0 1px 2px rgb(16 24 40 / 8%) !important;
+  box-shadow: none !important;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
 .react-flow__controls-button {
-  background: #fff !important;
+  background: #131722 !important;
   border-bottom: 1px solid var(--color-border) !important;
-  fill: #344054 !important;
+  fill: #c5cbe0 !important;
+}
+
+.react-flow__controls-button:hover {
+  background: #1b2030 !important;
+}
+
+.react-flow__attribution {
+  background: transparent !important;
 }
 
 .react-flow__edge-path {
-  stroke: #7d89a1;
-  stroke-width: 1.6;
+  stroke: #6f66d9;
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #4ade80;
 }
 
 .react-flow__connection-line {
-  stroke: #1f3a8a;
+  stroke: #7c6cf8;
 }
 
 .react-flow__handle {
-  width: 8px;
-  height: 8px;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgb(16 24 40 / 18%);
+  width: 10px;
+  height: 10px;
+  border: 2px solid #131722;
+  background: #8b7cf8;
+}
+
+.react-flow__handle-left {
+  background: #4ade80;
+}
+
+.react-flow__handle:hover {
+  box-shadow: 0 0 0 4px rgb(124 108 248 / 25%);
 }
 
 ::-webkit-scrollbar {
@@ -93,7 +124,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c8ced9;
+  background: #2b3248;
   border-radius: 99px;
   border: 2px solid transparent;
   background-clip: padding-box;

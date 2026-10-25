@@ -48,13 +48,28 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     );
   }
 
+  // Read once as text so an HTML proxy error or malformed JSON response does
+  // not leak an unhelpful SyntaxError into the UI.
+  const rawPayload = await response.text();
   const contentType = response.headers.get("content-type") ?? "";
-  const payload = contentType.includes("application/json")
-    ? await response.json()
-    : await response.text();
+  let payload: unknown = rawPayload;
+  if (rawPayload && contentType.includes("application/json")) {
+    try {
+      payload = JSON.parse(rawPayload) as unknown;
+    } catch {
+      throw new ApiError(
+        `ThinkNet backend returned invalid JSON for ${path} (HTTP ${response.status}).`,
+        response.status,
+      );
+    }
+  }
 
   if (!response.ok) {
     throw new ApiError(parseApiError(payload, response.status), response.status);
+  }
+
+  if (!rawPayload) {
+    throw new ApiError(`ThinkNet backend returned an empty response for ${path}.`, response.status);
   }
 
   return payload as T;
@@ -95,7 +110,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ model_id: modelId, dtype }),
     }),
-  getModel: (modelId: string) => request<ModelMetadata>(`/api/v1/models/${modelId}`),
+  getModel: (modelId: string) => request<ModelMetadata>(`/api/v1/models/${encodeURIComponent(modelId)}`),
   deleteModel: (modelId: string) =>
-    request<DeleteModelResponse>(`/api/v1/models/${modelId}`, { method: "DELETE" }),
+    request<DeleteModelResponse>(`/api/v1/models/${encodeURIComponent(modelId)}`, { method: "DELETE" }),
 };

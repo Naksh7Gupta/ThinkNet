@@ -170,7 +170,7 @@ def infer_shapes(graph: GraphDef, input_shape: list[int] | None = None) -> dict[
             result[-1] = cfg.get("out_features", 128)
             shapes[node.id] = result
         elif kind in {"Embedding", "TokenEmbedding"} and x:
-            width = cfg.get("embedding_dim", cfg.get("d_model", 512))
+            width = cfg.get("embedding_dim", cfg.get("d_model", 128))
             shapes[node.id] = list(x) + [width]
         elif kind in {"Add", "Multiply", "ResidualAdd"}:
             shapes[node.id] = x if len(source_shapes) < 2 or source_shapes[1] == x else None
@@ -238,7 +238,7 @@ def infer_shapes(graph: GraphDef, input_shape: list[int] | None = None) -> dict[
                 shapes[node.id] = [x[0], ac.get("num_classes", 10)]
             else:
                 shapes[node.id] = None
-        elif kind in {"LayerNorm", "RMSNorm", "Dropout", "Identity", "ReLU", "GELU", "SiLU", "Sigmoid", "Tanh", "Softmax", "MultiHeadAttention", "CausalSelfAttention", "GroupedQueryAttention", "MultiQueryAttention", "FlashAttention", "PreNormTransformerBlock", "TransformerEncoder", "VisionTransformerBlock", "MLP", "FeedForward", "SwiGLU", "LayerScale", "RotaryPositionEmbedding", "SinusoidalPositionEmbedding", "LearnedPositionEmbedding"}:
+        elif kind in {"LayerNorm", "RMSNorm", "BatchNorm1d", "Dropout", "Identity", "ReLU", "GELU", "SiLU", "Sigmoid", "Tanh", "Softmax", "MultiHeadAttention", "CausalSelfAttention", "GroupedQueryAttention", "MultiQueryAttention", "FlashAttention", "PreNormTransformerBlock", "TransformerEncoder", "VisionTransformerBlock", "MLP", "FeedForward", "SwiGLU", "LayerScale", "RotaryPositionEmbedding", "SinusoidalPositionEmbedding", "LearnedPositionEmbedding"}:
             shapes[node.id] = x
         else:
             shapes[node.id] = None

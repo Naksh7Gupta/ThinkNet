@@ -79,6 +79,6 @@ This is graph-level execution integration; it does not yet provide a persistent 
 
 ## Scope and limitations
 
-The catalog currently advertises **49 node types**, while this first compiler executes a deliberately smaller subset (Input/Output, Linear/AutoLinear, LayerNorm/RMSNorm, Dropout, GELU/ReLU/SiLU, Identity, and basic merge nodes). Other catalog entries are metadata for the growing node ecosystem, not a claim that every operator is implemented. ViT/Transformer presets, richer port typing, multi-input attention execution, full code generation, robust parameter schema validation, and end-to-end CI remain follow-up work.
+The catalog is a discoverability list, not proof that every entry executes. The compiler now supports Input/Output, Linear/AutoLinear, Embedding/TokenEmbedding, LayerNorm/RMSNorm, BatchNorm1d, Dropout, common activations, Flatten/Reshape, Conv2d/MaxPool2d/GlobalAveragePool, Add/Multiply/ResidualAdd/Concat, Identity, and the four reference architectures through an Architecture node. Other catalog entries remain metadata-only until they have configuration validation, runtime behavior, and tests. Port typing, broad operator coverage (including advanced attention variants), full code generation, stronger schema validation, and CI remain follow-up work.
 
 Shape inference is advisory, not a proof of runtime compatibility. Always run a small inference test before training. Avoid executing generated code from untrusted sources without isolation.

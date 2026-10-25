@@ -82,7 +82,7 @@ ThinkNet's current architectural direction is a lightweight desktop application 
 | Layer | Direction | Responsibility |
 | --- | --- | --- |
 | Desktop shell | **Tauri v2** | Native desktop packaging and controlled access to system capabilities |
-| User interface | **HTML, CSS, JavaScript** | Responsive screens, visual workflows, and interaction |
+| User interface | **Next & TS** | Responsive screens, visual workflows, and interaction |
 | Native layer | **Rust** | Native functionality and carefully permissioned inter-process communication |
 | AI workloads | **Python and/or C++ processes** | Model configuration, data processing, training, and inference |
 | AI ecosystem | **PyTorch and task-specific libraries** | Model development and specialized AI workflows |

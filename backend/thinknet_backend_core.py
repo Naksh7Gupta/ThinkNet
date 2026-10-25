@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from backend.thinknet_architectures import architecture_catalog, build_architecture
 from backend.thinknet_quantization import QuantizerNode, quantization_report, SUPPORTED_DTYPES
+from backend.thinknet_codegen import generate_python_source
 
 
 # User-editable catalog metadata. Each entry can be surfaced in the GUI's "+" menu.
@@ -570,6 +571,31 @@ def graph_shapes(payload: GraphDef, input_shape: list[int] | None = None):
     if errors: raise HTTPException(status_code=400, detail={"errors": errors})
     try: return infer_shapes(payload, input_shape)
     except Exception as exc: raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/v1/models/export")
+def export_model_source(payload: GraphDef):
+    """Validate a graph and return reusable Python source for its architecture."""
+    errors = validate_graph(payload)
+    if errors:
+        raise HTTPException(status_code=400, detail={"errors": errors})
+    try:
+        # Compile once before exporting so catalogued but unsupported nodes fail
+        # here rather than producing source that only fails when imported.
+        CompiledGraph(payload)
+        source = generate_python_source(payload.model_dump(mode="json"))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "exported": True,
+        "filename": "exported_model.py",
+        "language": "python",
+        "python_source": source,
+        "node_count": len(payload.nodes),
+        "edge_count": len(payload.edges),
+        "runtime_dependency": "ThinkNet backend package and its declared dependencies",
+        "note": "The generated file embeds the graph spec and reuses ThinkNet's tested compiler; it is not a standalone vendored PyTorch implementation.",
+    }
 
 
 @app.post("/api/v1/models/compile")

@@ -173,6 +173,8 @@ export type TrainingJob = {
   device?: string;
   parameter_count?: number;
   token_count?: number;
+  vocabulary_size?: number;
+  graph_adjustments?: string[];
   elapsed_seconds: number;
   artifact_available: boolean;
   created_at: string;
@@ -189,3 +191,20 @@ export type TrainingJobStartResponse = {
 
 export type TrainingJobsResponse = { jobs: TrainingJob[] };
 export type CancelTrainingJobResponse = { cancelled: boolean; job: TrainingJob };
+
+export type TrainingPreflight = {
+  ready: boolean;
+  errors: string[];
+  warnings: string[];
+  graph_adjustments: string[];
+  model_vocab_size: number | null;
+  vocabulary_size: number | null;
+  parameter_count: number | null;
+  token_count: number | null;
+  tokenizer_name: string;
+  dataset_path: string;
+  sequence_length?: number;
+  batch_size?: number;
+  max_steps?: number;
+  message: string;
+};

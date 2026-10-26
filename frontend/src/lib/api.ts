@@ -14,6 +14,7 @@ import type {
   TrainingSettings,
   TrainingJob,
   TrainingJobStartResponse,
+  TrainingPreflight,
   CancelTrainingJobResponse,
 } from "@/types/api";
 
@@ -108,6 +109,11 @@ export const api = {
       body: JSON.stringify({ graph, training }),
     }),
   getTrainingJob: (jobId: string) => request<TrainingJob>(`/api/v1/training/jobs/${jobId}`),
+  preflightTrainingJob: (graph: GraphDef, training: TrainingSettings) =>
+    request<TrainingPreflight>("/api/v1/training/jobs/preflight", {
+      method: "POST",
+      body: JSON.stringify({ graph, training }),
+    }),
   cancelTrainingJob: (jobId: string) =>
     request<CancelTrainingJobResponse>(`/api/v1/training/jobs/${jobId}/cancel`, { method: "POST" }),
   getTrainingDownloadUrl: (jobId: string) =>

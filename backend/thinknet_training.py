@@ -115,6 +115,9 @@ def create_training_notebook(payload: NotebookRequest):
     return {"generated": True, "filename": f"{graph.name or 'thinknet'}_training.ipynb", "notebook": notebook, "training": payload.training.model_dump(), "task": "causal_language_modeling", "note": "Notebook generation only; execution and live telemetry are future work."}
 
 
-# Mount local managed training-job endpoints under the existing training API.
-from backend.thinknet_training_jobs import router as training_jobs_router  # noqa: E402
-router.include_router(training_jobs_router)
+# Managed training-job endpoints live in their own module and are mounted by the app factory,
+# so this module never imports them at import time (jobs depend on TrainingSettings from here).
+def mount_job_endpoints() -> None:
+    from backend.thinknet_training_jobs import router as training_jobs_router
+
+    router.include_router(training_jobs_router)

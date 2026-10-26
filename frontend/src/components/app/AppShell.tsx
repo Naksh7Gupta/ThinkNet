@@ -1,21 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { Box } from "lucide-react";
+import { useState } from "react";
 import { DesignerWorkspace } from "@/components/designer/DesignerWorkspace";
+import { TrainingStudio } from "@/components/training/TrainingStudio";
 import { api, getApiBaseUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useDesignerStore } from "@/store/designer-store";
 
 const TABS = [
-  { label: "Build", active: true },
-  { label: "Data", active: false },
-  { label: "Train", active: false },
-  { label: "Evaluate", active: false },
-  { label: "Deploy", active: false },
-  { label: "Agents", active: false },
+  { label: "Build", enabled: true },
+  { label: "Data", enabled: false },
+  { label: "Train", enabled: true },
+  { label: "Evaluate", enabled: false },
+  { label: "Deploy", enabled: false },
+  { label: "Agents", enabled: false },
 ];
 
 export function AppShell() {
-  const graphName = useDesignerStore((s) => s.graphName);
+  const [workspace, setWorkspace] = useState<"Build" | "Train">("Build");
+  const graphName = useDesignerStore((state) => state.graphName);
   const health = useQuery({
     queryKey: ["health"],
     queryFn: api.health,
@@ -34,30 +37,38 @@ export function AppShell() {
           <div className="text-[15px] font-semibold leading-none">ThinkNet</div>
         </div>
         <nav className="flex h-full items-stretch gap-1" aria-label="Workspaces">
-          {TABS.map((tab) => (
-            <button
-              key={tab.label}
-              type="button"
-              disabled={!tab.active}
-              aria-current={tab.active ? "page" : undefined}
-              title={tab.active ? undefined : `${tab.label} is not available yet`}
-              className={cn(
-                "relative px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                tab.active
-                  ? "text-accent-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
-                  : "cursor-not-allowed text-muted-foreground/60",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {TABS.map((tab) => {
+            const active = tab.label === workspace;
+            return (
+              <button
+                key={tab.label}
+                type="button"
+                disabled={!tab.enabled}
+                onClick={() => {
+                  if (tab.label === "Build" || tab.label === "Train") setWorkspace(tab.label);
+                }}
+                aria-current={active ? "page" : undefined}
+                title={tab.enabled ? undefined : tab.label + " is not available yet"}
+                className={cn(
+                  "relative px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  active
+                    ? "text-accent-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
+                    : tab.enabled
+                      ? "text-muted-foreground hover:text-foreground"
+                      : "cursor-not-allowed text-muted-foreground/60",
+                )}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </nav>
         <div className="ml-auto flex items-center gap-3 text-[12px]">
           <span className="hidden font-mono text-muted-foreground lg:inline">{getApiBaseUrl()}</span>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1">
             <span className={cn("h-2 w-2 rounded-full", connected ? "bg-success" : "bg-destructive")} />
             {connected
-              ? `Backend ${health.data.torch_version}`
+              ? "Backend " + health.data.torch_version
               : health.isError
                 ? "Backend unreachable"
                 : "Checking backend"}
@@ -68,7 +79,7 @@ export function AppShell() {
           </span>
         </div>
       </header>
-      <DesignerWorkspace />
+      {workspace === "Build" ? <DesignerWorkspace /> : <TrainingStudio />}
     </div>
   );
 }

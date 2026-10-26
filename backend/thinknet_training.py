@@ -113,3 +113,8 @@ def create_training_notebook(payload: NotebookRequest):
         raise HTTPException(status_code=400, detail={"errors": [str(exc)]}) from exc
     notebook = build_training_notebook(graph.model_dump(mode="json"), payload.training)
     return {"generated": True, "filename": f"{graph.name or 'thinknet'}_training.ipynb", "notebook": notebook, "training": payload.training.model_dump(), "task": "causal_language_modeling", "note": "Notebook generation only; execution and live telemetry are future work."}
+
+
+# Mount local managed training-job endpoints under the existing training API.
+from backend.thinknet_training_jobs import router as training_jobs_router  # noqa: E402
+router.include_router(training_jobs_router)

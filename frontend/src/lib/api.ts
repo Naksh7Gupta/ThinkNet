@@ -11,6 +11,10 @@ import type {
   QuantizeResponse,
   ShapePreviewResponse,
   ValidationResponse,
+  TrainingSettings,
+  TrainingJob,
+  TrainingJobStartResponse,
+  CancelTrainingJobResponse,
 } from "@/types/api";
 
 export const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
@@ -98,4 +102,14 @@ export const api = {
   getModel: (modelId: string) => request<ModelMetadata>(`/api/v1/models/${modelId}`),
   deleteModel: (modelId: string) =>
     request<DeleteModelResponse>(`/api/v1/models/${modelId}`, { method: "DELETE" }),
+  startTrainingJob: (graph: GraphDef, training: TrainingSettings) =>
+    request<TrainingJobStartResponse>("/api/v1/training/jobs", {
+      method: "POST",
+      body: JSON.stringify({ graph, training }),
+    }),
+  getTrainingJob: (jobId: string) => request<TrainingJob>(`/api/v1/training/jobs/${jobId}`),
+  cancelTrainingJob: (jobId: string) =>
+    request<CancelTrainingJobResponse>(`/api/v1/training/jobs/${jobId}/cancel`, { method: "POST" }),
+  getTrainingDownloadUrl: (jobId: string) =>
+    `${getApiBaseUrl()}/api/v1/training/jobs/${jobId}/download`,
 };

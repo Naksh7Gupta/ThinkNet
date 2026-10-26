@@ -1,54 +1,32 @@
-# ThinkNet training notebook pipeline
+# ThinkNet training
 
-This milestone adds a validated training-settings schema and an API endpoint that
-generates a Jupyter notebook from a ThinkNet graph configuration.
+## Notebook export
 
-## Endpoint
+`POST /api/v1/training/notebook` accepts a validated graph and training settings, and returns a Jupyter notebook JSON document. The initial notebook template targets causal language modelling.
 
-POST /api/v1/training/notebook
+## Local managed training
 
-Example payload:
+The Model Training Studio uses these endpoints:
 
-```json
-{
-  "graph": {
-    "name": "tiny-text-model",
-    "nodes": [],
-    "edges": []
-  },
-  "training": {
-    "learning_rate": 0.0003,
-    "batch_size": 4,
-    "sequence_length": 128,
-    "max_steps": 100,
-    "log_every_steps": 10,
-    "save_every_steps": 50,
-    "tokenizer_name": "gpt2",
-    "dataset_path": "backend/data/text.txt",
-    "output_dir": "training_output"
-  }
-}
+- `POST /api/v1/training/jobs` — start a local causal-LM training job from a graph and settings.
+- `GET /api/v1/training/jobs/{job_id}` — read job state, progress, latest loss, device and errors.
+- `GET /api/v1/training/jobs` — list jobs known to the current backend process.
+- `POST /api/v1/training/jobs/{job_id}/cancel` — request cooperative cancellation.
+- `GET /api/v1/training/jobs/{job_id}/download` — download the completed ZIP bundle.
+
+The frontend polls the job status while it is queued or running, so progress and loss update during training. Jobs run in a background thread and are held in memory; restarting the backend clears the job registry. This is suitable for a local prototype, not a durable multi-user job scheduler.
+
+## Current supported objective and limitations
+
+The managed runner currently supports **causal language modelling** only. The compiled model must accept token-ID tensors shaped `[batch, sequence]` and return logits shaped `[batch, sequence, vocabulary]`. The selected tokenizer's IDs must fit the model vocabulary. A graph passing structural validation does not automatically make it trainable for this objective.
+
+The runner uses CUDA if PyTorch detects a usable CUDA device; otherwise it uses the local CPU. It does not provision GPUs or connect Colab/Kaggle. The runner saves a final state dict, periodic checkpoints, JSONL metrics, graph/training configuration, a manifest and a ZIP artifact bundle. Checkpoints include optimizer state, but resume-from-checkpoint is not implemented yet.
+
+Install the backend requirements, including `transformers`, and start the API from the repository root:
+
+```bash
+python -m pip install -r backend/requirements.txt
+uvicorn backend.thinknet_backend_core:app --reload
 ```
 
-The graph must pass ThinkNet's existing schema validation and compiler check.
-The response includes a notebook document that can be saved as an .ipynb file.
-
-## Current scope
-
-- The default task is causal language modelling on a local text file.
-- The generated notebook uses the prebuilt GPT-2 tokenizer by default.
-- The user controls learning rate, batch size, sequence length, step count,
-  logging interval, checkpoint interval, weight decay, gradient clipping, seed,
-  tokenizer, dataset path, and output directory.
-- The notebook writes JSONL metrics, resumable checkpoint dictionaries, and final
-  model weights.
-- CUDA is used only if already available in the notebook's Python environment.
-  ThinkNet does not provision remote GPUs in this milestone.
-
-This is a notebook generator, not yet a backend-managed training job. Training
-runs inside the notebook environment, so live progress streaming into the desktop
-frontend, cancellation/resume APIs, general task-specific loss functions, and a
-persistent experiment registry remain follow-up work. A valid graph is not
-automatically compatible with causal language modelling: the selected graph must
-produce vocabulary logits compatible with the chosen tokenizer. The compiler rejects
-unsupported graph nodes before notebook generation.
+The default dataset is a small placeholder at `backend/data/text.txt`; replace it with a real, properly licensed corpus before doing meaningful training. The default tokenizer is GPT-2, so the model architecture's vocabulary size must be compatible with that tokenizer (typically 50,257 for GPT-2). Small local test models should use a tokenizer/vocabulary configuration that matches their output layer.

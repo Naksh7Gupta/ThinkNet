@@ -45,11 +45,16 @@ def test_codegen_rejects_invalid_or_non_executable_graphs():
     response = client.post("/api/v1/models/export", json=invalid)
     assert response.status_code == 400
 
-    metadata_only = simple_graph()
-    metadata_only["nodes"][1] = {"id": "unsupported", "type": "FlashAttention", "config": {}}
-    metadata_only["edges"][0]["target"] = "unsupported"
-    metadata_only["edges"][1]["source"] = "unsupported"
-    response = client.post("/api/v1/models/export", json=metadata_only)
+    # Structurally valid, but the architecture config cannot build a module.
+    unbuildable = simple_graph()
+    unbuildable["nodes"][1] = {
+        "id": "body",
+        "type": "Architecture",
+        "config": {"architecture": "decoder_transformer_lm", "config": {"d_model": 65, "num_heads": 4}},
+    }
+    unbuildable["edges"][0]["target"] = "body"
+    unbuildable["edges"][1]["source"] = "body"
+    response = client.post("/api/v1/models/export", json=unbuildable)
     assert response.status_code == 400
 
 

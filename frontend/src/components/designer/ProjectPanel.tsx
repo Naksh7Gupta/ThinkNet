@@ -2,24 +2,35 @@ import { useReactFlow } from "@xyflow/react";
 import { ChevronDown, ChevronRight, Network, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { FRAME_NODE_TYPE } from "@/lib/graph";
 import { cn } from "@/lib/utils";
 import { useDesignerStore } from "@/store/designer-store";
 
 export function ProjectPanel() {
-  const nodes = useDesignerStore((s) => s.nodes);
+  const allNodes = useDesignerStore((s) => s.nodes);
   const graphName = useDesignerStore((s) => s.graphName);
   const selectedNodeId = useDesignerStore((s) => s.selectedNodeId);
   const { fitView } = useReactFlow();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(true);
 
+  // Frames are visual only; they are not part of the model.
+  const nodes = useMemo(
+    () => allNodes.filter((node) => node.type !== FRAME_NODE_TYPE),
+    [allNodes],
+  );
+  // A ×N frame hides N-1 identical copies. They remain in the model, so the
+  // header counts them even though the list mirrors the canvas.
+  const drawn = useMemo(() => nodes.filter((node) => !node.hidden), [nodes]);
+  const folded = nodes.length - drawn.length;
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return nodes;
-    return nodes.filter(
+    if (!q) return drawn;
+    return drawn.filter(
       (node) => node.id.toLowerCase().includes(q) || node.data.typeName.toLowerCase().includes(q),
     );
-  }, [nodes, query]);
+  }, [drawn, query]);
 
   function select(id: string) {
     useDesignerStore.setState((state) => ({
@@ -51,13 +62,18 @@ export function ProjectPanel() {
       >
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         <span className="truncate">{graphName || "untitled_architecture"}</span>
-        <span className="ml-auto text-[12px] font-normal text-muted-foreground">{nodes.length}</span>
+        <span
+          className="ml-auto text-[12px] font-normal text-muted-foreground"
+          title={folded > 0 ? `${drawn.length} shown, ${folded} identical copies folded into ×N blocks` : undefined}
+        >
+          {nodes.length}
+        </span>
       </button>
       {open && (
         <div className="mt-1 max-h-44 space-y-0.5 overflow-y-auto pl-3">
           {filtered.length === 0 && (
             <p className="px-2 py-1 text-[12px] text-muted-foreground">
-              {nodes.length === 0 ? "No nodes yet." : "No nodes match this filter."}
+              {drawn.length === 0 ? "No nodes yet." : "No nodes match this filter."}
             </p>
           )}
           {filtered.map((node) => (
@@ -80,6 +96,11 @@ export function ProjectPanel() {
               <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">{node.id}</span>
             </button>
           ))}
+          {folded > 0 && (
+            <p className="px-2 py-1 text-[11px] text-muted-foreground">
+              +{folded} identical copies inside the ×N blocks — in the model, drawn once.
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -1,8 +1,7 @@
+import { ChevronRight, Lightbulb, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import {
   architectureDefaults,
   fieldsForNode,
@@ -13,6 +12,7 @@ import {
   setConfigValue,
   type ConfigField,
 } from "@/lib/node-config";
+import { explanationFor } from "@/lib/node-explanations";
 import { useDesignerStore } from "@/store/designer-store";
 import type { ArchitectureInfo } from "@/types/api";
 
@@ -33,6 +33,7 @@ function FieldControl({
         <span>{field.label}</span>
         <input
           type="checkbox"
+          className="accent-[#6d5df6]"
           checked={Boolean(value)}
           onChange={(e) => onChange(setConfigValue(config, field, e.target.checked))}
         />
@@ -45,7 +46,7 @@ function FieldControl({
       <div className="space-y-1">
         <Label>{field.label}</Label>
         <select
-          className="h-8 w-full rounded-md border border-border bg-card px-2 text-sm"
+          className="h-8 w-full rounded-md border border-border px-2 text-sm"
           value={typeof value === "string" ? value : ""}
           onChange={(e) => {
             const nextValue = e.target.value;
@@ -108,17 +109,56 @@ function FieldControl({
   );
 }
 
+function Section({
+  title,
+  hint,
+  defaultOpen,
+  children,
+}: {
+  title: string;
+  hint: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details open={defaultOpen} className="group">
+      <summary className="flex cursor-pointer list-none items-center justify-between py-1 text-[13px] font-medium [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-1.5">
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-90" />
+          {title}
+        </span>
+        <span className="text-[11px] font-normal text-muted-foreground">{hint}</span>
+      </summary>
+      <div className="mt-2 space-y-3 pl-5">{children}</div>
+    </details>
+  );
+}
+
 export function NodeInspector({ architectures }: { architectures: ArchitectureInfo[] }) {
   const nodes = useDesignerStore((s) => s.nodes);
   const selectedNodeId = useDesignerStore((s) => s.selectedNodeId);
   const updateNodeConfig = useDesignerStore((s) => s.updateNodeConfig);
   const shapes = useDesignerStore((s) => s.lastShapePreview?.shapes);
-  const selected = nodes.find((node) => node.id === selectedNodeId);
+  const index = nodes.findIndex((node) => node.id === selectedNodeId);
+  const selected = index >= 0 ? nodes[index] : undefined;
+
+  const heading = (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2 text-[15px] font-semibold">
+        <SlidersHorizontal className="h-4 w-4 text-accent-foreground" />
+        Properties
+      </div>
+      {selected && <span className="text-[12px] text-muted-foreground">Node #{index + 1}</span>}
+    </div>
+  );
 
   if (!selected) {
     return (
-      <div className="p-4 text-sm text-muted-foreground">
-        Select a node to inspect configuration fields accepted by the current backend.
+      <div className="space-y-2 p-4">
+        {heading}
+        <p className="text-sm text-muted-foreground">
+          Select a node to inspect configuration fields accepted by the current backend.
+        </p>
       </div>
     );
   }
@@ -129,78 +169,91 @@ export function NodeInspector({ architectures }: { architectures: ArchitectureIn
     selected.data.catalog,
     architectures.map((item) => item.name),
   );
+  const basic = fields.filter((field) => !field.label.includes("(alias)"));
+  const advanced = fields.filter((field) => field.label.includes("(alias)"));
   const issues = localConfigIssues(selected.data.typeName, selected.data.config);
   const preview = shapes?.[selected.id];
+  const status = selected.data.catalog?.status;
+
+  const renderField = (field: ConfigField) => (
+    <FieldControl
+      key={`${selected.id}:${field.nestedPath ?? "root"}:${field.key}`}
+      field={field}
+      config={selected.data.config}
+      onChange={(config) => updateNodeConfig(selected.id, config)}
+    />
+  );
 
   return (
-    <ScrollArea className="h-full">
-      <div className="space-y-3 p-4">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Inspector
-          </div>
-          <div className="mt-1 text-base font-semibold">{selected.data.typeName}</div>
-          <div className="mt-1 font-mono text-[11px] text-muted-foreground">{selected.id}</div>
-        </div>
-        <div className="flex flex-wrap gap-1">
-          {selected.data.catalog && (
-            <Badge
-              variant={
-                selected.data.catalog.status === "implemented-and-tested"
-                  ? "success"
-                  : selected.data.catalog.status === "partial"
-                    ? "warning"
-                    : "muted"
-              }
-            >
-              {selected.data.catalog.status}
-            </Badge>
-          )}
-          {selected.data.catalog && <Badge>{selected.data.catalog.category}</Badge>}
-        </div>
-        {selected.data.catalog?.status === "metadata-only" && (
-          <p className="text-[12px] leading-5 text-warning">
-            This catalog entry is metadata-only. The compiler will reject it until an executable path exists.
-          </p>
-        )}
-        {selected.data.catalog?.status === "partial" && (
-          <p className="text-[12px] leading-5 text-muted-foreground">
-            An execution path exists, but broader acceptance coverage is still limited.
-          </p>
-        )}
-        <Separator />
-        {fields.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            This node has no additional configuration fields in the current backend.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {fields.map((field) => (
-              <FieldControl
-                key={`${selected.id}:${field.nestedPath ?? "root"}:${field.key}`}
-                field={field}
-                config={selected.data.config}
-                onChange={(config) => updateNodeConfig(selected.id, config)}
-              />
-            ))}
-          </div>
-        )}
-        {issues.length > 0 && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-warning">
-            {issues.map((issue) => (
-              <div key={issue}>{issue}</div>
-            ))}
-          </div>
-        )}
-        {preview !== undefined && (
-          <div>
-            <Label>Advisory shape</Label>
-            <p className="mt-1 font-mono text-xs">
-              {preview === null ? "unknown" : JSON.stringify(preview)}
-            </p>
-          </div>
-        )}
+    <div className="space-y-4 p-4">
+      {heading}
+      <div className="space-y-1">
+        <Label>Node ID</Label>
+        <Input value={selected.id} readOnly className="font-mono text-[12px]" />
       </div>
-    </ScrollArea>
+      <div className="flex flex-wrap items-center gap-1">
+        <Badge variant="default">{selected.data.typeName}</Badge>
+        {selected.data.catalog && (
+          <Badge variant={status === "implemented-and-tested" ? "success" : status === "partial" ? "warning" : "muted"}>
+            {status}
+          </Badge>
+        )}
+        {selected.data.catalog && <Badge>{selected.data.catalog.category}</Badge>}
+      </div>
+      {status === "metadata-only" && (
+        <p className="text-[12px] leading-5 text-warning">
+          This catalog entry is metadata-only. The compiler will reject it until an executable path exists.
+        </p>
+      )}
+      {status === "partial" && (
+        <p className="text-[12px] leading-5 text-muted-foreground">
+          An execution path exists, but broader acceptance coverage is still limited.
+        </p>
+      )}
+
+      {fields.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          This node has no additional configuration fields in the current backend.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {basic.length > 0 && (
+            <Section title="Basics" hint="Primary controls" defaultOpen>
+              {basic.map(renderField)}
+            </Section>
+          )}
+          {advanced.length > 0 && (
+            <Section title="Advanced settings" hint="Aliases">
+              {advanced.map(renderField)}
+            </Section>
+          )}
+        </div>
+      )}
+
+      {issues.length > 0 && (
+        <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[12px] text-warning">
+          {issues.map((issue) => (
+            <div key={issue}>{issue}</div>
+          ))}
+        </div>
+      )}
+
+      {preview !== undefined && (
+        <div>
+          <Label>Advisory shape</Label>
+          <p className="mt-1 font-mono text-xs">{preview === null ? "unknown" : JSON.stringify(preview)}</p>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-primary/25 bg-primary/5 p-3">
+        <div className="flex items-center gap-1.5 text-[13px] font-medium text-accent-foreground">
+          <Lightbulb className="h-3.5 w-3.5" />
+          Plain Explanation
+        </div>
+        <p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">
+          {explanationFor(selected.data.typeName)}
+        </p>
+      </div>
+    </div>
   );
 }

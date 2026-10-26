@@ -2,14 +2,14 @@ import { applyEdgeChanges, applyNodeChanges, type Connection, type EdgeChange, t
 import { create } from "zustand";
 import {
   createNodeFromCatalog,
-  FRAME_NODE_TYPE,
   graphDefToFlow,
+  isDualInputType,
   isMergeType,
   MODEL_TRANSFORM_TYPES,
-  nodeSizeFor,
+  sizeNodes,
   styleEdges,
   toGraphDef,
-  type LayoutInput,
+  type LayoutOptions,
   type ThinkNetEdge,
   type ThinkNetNode,
 } from "@/lib/graph";
@@ -38,20 +38,20 @@ type DesignerState = {
   loadGraph: (
     graph: GraphDef,
     catalogByType: Map<string, CatalogNode>,
-    layout?: LayoutInput,
+    layout?: LayoutOptions,
   ) => void;
   getGraph: () => GraphDef;
   setValidation: (value: ValidationResponse | null) => void;
   setShapePreview: (value: ShapePreviewResponse | null) => void;
+  /** Renders every node as a compact flat box instead of a full config card. */
+  diagramView: boolean;
+  setDiagramView: (value: boolean) => void;
   setLastNote: (value: string | null) => void;
   setLastError: (value: string | null) => void;
   addModel: (model: ModelHandle) => void;
   removeModel: (modelId: string) => void;
   setInspectedModel: (modelId: string | null) => void;
   clearLibraryNotice: () => void;
-  /** Flat boxes + "+" discs instead of full node cards. */
-  diagramView: boolean;
-  setDiagramView: (value: boolean) => void;
 };
 
 function nextId(typeName: string, nodes: ThinkNetNode[]): string {
@@ -60,25 +60,6 @@ function nextId(typeName: string, nodes: ThinkNetNode[]): string {
   const used = new Set(nodes.map((node) => node.id));
   while (used.has(`${base}_${i}`)) i += 1;
   return `${base}_${i}`;
-}
-
-/**
- * Applies the presentation-mode footprint to every tensor node. Vertical
- * layouts already bake diagram spacing into their positions, so their sizes
- * stay untouched; frames are decorative and never resize.
- */
-function sizeNodes(nodes: ThinkNetNode[], diagram: boolean): ThinkNetNode[] {
-  return nodes.map((node) =>
-    node.type === FRAME_NODE_TYPE || node.data.vertical
-      ? node
-      : {
-          ...node,
-          style: {
-            ...node.style,
-            ...nodeSizeFor(node.data.typeName, node.data.catalog, diagram),
-          },
-        },
-  );
 }
 
 export const useDesignerStore = create<DesignerState>((set, get) => ({
@@ -93,17 +74,9 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   lastError: null,
   models: [],
   inspectedModel: null,
-  canvasRevision: 0,
   diagramView: false,
+  canvasRevision: 0,
   setGraphName: (graphName) => set({ graphName }),
-  setDiagramView: (value) => {
-    const nodes = sizeNodes(get().nodes, value);
-    set({
-      diagramView: value,
-      nodes,
-      edges: styleEdges(get().edges, nodes, value),
-    });
-  },
   setSelectedNodeId: (selectedNodeId) => set({ selectedNodeId }),
   onNodesChange: (changes) => {
     const nodes = applyNodeChanges(changes, get().nodes) as ThinkNetNode[];
@@ -119,13 +92,16 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     const typeName = target?.data.typeName ?? "";
     const incoming = get().edges.filter((edge) => edge.target === connection.target);
     if (isMergeType(typeName) && incoming.length >= 2) return;
+    // CrossAttention consumes exactly one query and one context tensor; a third edge
+    // would silently overwrite a port when the backend builds its port map.
+    if (typeName === "CrossAttention" && incoming.length >= 2) return;
 
     let targetHandle = connection.targetHandle ?? "input";
     if (isMergeType(typeName) && !connection.targetHandle) {
       const used = new Set(incoming.map((edge) => edge.targetHandle ?? "main"));
       targetHandle = used.has("main") ? "skip" : "main";
     }
-    if (typeName === "Concat" && !connection.targetHandle) {
+    if (isDualInputType(typeName) && !connection.targetHandle) {
       targetHandle = incoming.some((edge) => (edge.targetHandle ?? "input") === "input")
         ? "input_b"
         : "input";
@@ -148,7 +124,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       sourceHandle: connection.sourceHandle ?? "output",
       targetHandle,
     };
-    set({ edges: styleEdges([...get().edges, edge], get().nodes, get().diagramView) });
+    set({ edges: [...get().edges, edge] });
   },
   addCatalogNode: (catalog, position) => {
     if (MODEL_TRANSFORM_TYPES.has(catalog.type) || catalog.execution_domain === "model-transform") {
@@ -158,16 +134,12 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       });
       return;
     }
-    const node = sizeNodes(
-      [
-        createNodeFromCatalog(
-          catalog,
-          position ?? { x: 120 + get().nodes.length * 24, y: 80 + get().nodes.length * 18 },
-          nextId(catalog.type, get().nodes),
-        ),
-      ],
+    const node = createNodeFromCatalog(
+      catalog,
+      position ?? { x: 120 + get().nodes.length * 24, y: 80 + get().nodes.length * 18 },
+      nextId(catalog.type, get().nodes),
       get().diagramView,
-    )[0];
+    );
     set({
       nodes: [...get().nodes, node],
       selectedNodeId: node.id,
@@ -181,13 +153,11 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       ),
     }),
   loadGraph: (graph, catalogByType, layout) => {
-    const flow = graphDefToFlow(graph, catalogByType, layout);
-    const diagram = get().diagramView;
-    const nodes = sizeNodes(flow.nodes, diagram);
+    const flow = graphDefToFlow(graph, catalogByType, layout, get().diagramView);
     set({
       graphName: graph.name,
-      nodes,
-      edges: styleEdges(flow.edges, nodes, diagram),
+      nodes: flow.nodes,
+      edges: flow.edges,
       selectedNodeId: null,
       lastValidation: null,
       lastShapePreview: null,
@@ -199,6 +169,17 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   getGraph: () => toGraphDef(get().graphName, get().nodes, get().edges),
   setValidation: (lastValidation) => set({ lastValidation }),
   setShapePreview: (lastShapePreview) => set({ lastShapePreview }),
+  // Presentation only: the graph payload is identical either way, so switching
+  // modes re-sizes and re-routes the existing nodes instead of rebuilding them.
+  setDiagramView: (diagramView) => {
+    const nodes = get().nodes;
+    set({
+      diagramView,
+      nodes: sizeNodes(nodes, diagramView),
+      edges: styleEdges(get().edges, nodes, diagramView),
+      canvasRevision: get().canvasRevision + 1,
+    });
+  },
   setLastNote: (lastNote) => set({ lastNote }),
   setLastError: (lastError) => set({ lastError }),
   addModel: (model) => set({ models: [model, ...get().models], inspectedModel: model.model_id }),

@@ -129,3 +129,216 @@ select {
   border: 2px solid transparent;
   background-clip: padding-box;
 }
+
+.tn-node {
+  min-width: 190px;
+  max-width: 260px;
+  overflow: visible;
+  color: #dedede;
+  background: #292929;
+  border: 1px solid #171717;
+  border-radius: 5px;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 22%);
+  font-family: Inter, "Segoe UI", sans-serif;
+  font-size: 11px;
+}
+
+.tn-node-selected {
+  border-color: #e5e5e5;
+  box-shadow:
+    0 0 0 1px #e5e5e5,
+    0 4px 14px rgb(0 0 0 / 35%);
+}
+
+.tn-node-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 25px;
+  padding: 0 8px;
+  color: #f2f2f2;
+  background: var(--tn-accent, #398b78);
+  border-radius: 4px 4px 0 0;
+  font-weight: 600;
+}
+
+.tn-node-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tn-status-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #b9d9c5;
+}
+
+.tn-status-error {
+  background: #ff6666;
+}
+
+.tn-status-running {
+  background: #f5cf64;
+}
+
+.tn-node-section {
+  padding: 5px 0;
+}
+
+.tn-node-fields {
+  padding: 4px 7px 6px;
+  border-top: 1px solid #393939;
+  border-bottom: 1px solid #202020;
+}
+
+.tn-property-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 25px;
+}
+
+.tn-property-label {
+  flex: 0 0 43%;
+  overflow: hidden;
+  color: #bdbdbd;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tn-property-control {
+  flex: 1;
+  min-width: 0;
+}
+
+.tn-number,
+.tn-select,
+.tn-text {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 3px 5px;
+  color: #ededed;
+  background: #414141;
+  border: 1px solid #303030;
+  border-radius: 3px;
+  outline: none;
+  font: inherit;
+}
+
+.tn-number:focus,
+.tn-select:focus,
+.tn-text:focus {
+  border-color: #7b9fbb;
+}
+
+.tn-select {
+  cursor: pointer;
+}
+
+.tn-select option {
+  color: #ededed;
+  background: #303030;
+}
+
+.tn-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #d0d0d0;
+  cursor: pointer;
+}
+
+.tn-checkbox input {
+  width: 12px;
+  height: 12px;
+  accent-color: #8bafd0;
+}
+
+.tn-readonly {
+  padding: 4px 5px;
+  color: #bcbcbc;
+  background: #363636;
+  border-radius: 3px;
+}
+
+.tn-socket-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 10px;
+  color: #d0d0d0;
+}
+
+.tn-input-row {
+  justify-content: flex-start;
+}
+
+.tn-output-row {
+  justify-content: flex-end;
+}
+
+.tn-socket {
+  z-index: 3;
+}
+
+.tn-socket-row .tn-socket {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tn-input-row .tn-socket {
+  left: -5px;
+}
+
+.tn-output-row .tn-socket {
+  right: -5px;
+}
+
+/* Ensure interactive controls don't drag the node. */
+.tn-node input,
+.tn-node select {
+  cursor: default;
+}
+
+/* Blender-style dark workspace */
+.react-flow {
+  background: #202020;
+}
+
+.react-flow__background {
+  background-color: #202020;
+}
+
+.react-flow__edge-path {
+  stroke: #36c9a0;
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #80e4c9;
+  stroke-width: 2.5;
+}
+
+.react-flow__controls {
+  overflow: hidden;
+  background: #303030;
+  border: 1px solid #454545;
+  border-radius: 6px;
+}
+
+.react-flow__controls button {
+  color: #dedede;
+  background: #303030;
+  border-bottom: 1px solid #454545;
+  fill: #dedede;
+}
+
+.react-flow__controls button:hover {
+  background: #454545;
+}

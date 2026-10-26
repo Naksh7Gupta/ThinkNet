@@ -1,13 +1,14 @@
 ﻿"""ThinkNet graph backend: configurable dimensions, graph validation, shape previews and PyTorch execution."""
 from __future__ import annotations
 
+import math
 from collections import defaultdict, deque
 from typing import Any
 from uuid import uuid4
 
 import torch
 from torch import nn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -23,7 +24,8 @@ NODE_CATALOG = [
     ("TokenEmbedding", "Embedding"), ("LearnedPositionEmbedding", "Position"),
     ("SinusoidalPositionEmbedding", "Position"), ("RotaryPositionEmbedding", "Position"),
     ("LayerNorm", "Normalization"), ("RMSNorm", "Normalization"),
-    ("BatchNorm1d", "Normalization"), ("GroupNorm", "Normalization"),
+    ("BatchNorm1d", "Normalization"), ("BatchNorm2d", "Normalization"),
+    ("GroupNorm", "Normalization"),
     ("Dropout", "Regularization"), ("ReLU", "Activation"), ("GELU", "Activation"),
     ("SiLU", "Activation"), ("Sigmoid", "Activation"), ("Tanh", "Activation"),
     ("Softmax", "Activation"), ("SwiGLU", "FFN"), ("MLP", "FFN"),
@@ -35,9 +37,10 @@ NODE_CATALOG = [
     ("Add", "Merge"), ("Multiply", "Merge"), ("Concat", "Merge"),
     ("ResidualAdd", "Transformer"), ("PreNormTransformerBlock", "Transformer"),
     ("TransformerEncoder", "Transformer"), ("LayerScale", "Transformer"),
-    ("PatchEmbedding", "Vision"), ("ClassToken", "Vision"),
+    ("PatchEmbedding", "Vision"), ("ClassToken", "Vision"), ("SelectToken", "Vision"),
     ("VisionTransformerBlock", "Vision"), ("GlobalAveragePool", "Vision"),
-    ("Conv2d", "Vision"), ("MaxPool2d", "Vision"), ("Flatten", "Shape"),
+    ("Conv2d", "Vision"), ("MaxPool2d", "Vision"), ("AvgPool2d", "Vision"),
+    ("AdaptiveAvgPool2d", "Vision"), ("Flatten", "Shape"),
     ("Reshape", "Shape"), ("MeanPool", "Shape"), ("Architecture", "Architecture"),
     ("Quantizer", "Model Transform"), ("LMHead", "Language Model"),
 ]
@@ -48,26 +51,34 @@ NODE_IMPLEMENTATION_STATUS = {
     "Output": "implemented-and-tested",
     "Identity": "implemented-and-tested",
     "Linear": "implemented-and-tested",
+    "AutoLinear": "implemented-and-tested",
     "Embedding": "implemented-and-tested",
     "TokenEmbedding": "implemented-and-tested",
     "BatchNorm1d": "implemented-and-tested",
-    "Dropout": "partial",
-    "ReLU": "partial",
-    "GELU": "partial",
-    "SiLU": "partial",
-    "Sigmoid": "partial",
-    "Tanh": "partial",
+    "BatchNorm2d": "implemented-and-tested",
+    "GroupNorm": "implemented-and-tested",
+    "LayerNorm": "implemented-and-tested",
+    "RMSNorm": "implemented-and-tested",
+    "Dropout": "implemented-and-tested",
+    "ReLU": "implemented-and-tested",
+    "GELU": "implemented-and-tested",
+    "SiLU": "implemented-and-tested",
+    "Sigmoid": "implemented-and-tested",
+    "Tanh": "implemented-and-tested",
     "Softmax": "implemented-and-tested",
-    "AutoLinear": "partial",
-    "LayerNorm": "partial",
-    "RMSNorm": "partial",
-    "Conv2d": "partial",
-    "MaxPool2d": "partial",
-    "GlobalAveragePool": "partial",
+    "Conv2d": "implemented-and-tested",
+    "MaxPool2d": "implemented-and-tested",
+    "AvgPool2d": "implemented-and-tested",
+    "AdaptiveAvgPool2d": "implemented-and-tested",
+    "GlobalAveragePool": "implemented-and-tested",
+    "PatchEmbedding": "implemented-and-tested",
+    "ClassToken": "implemented-and-tested",
+    "SelectToken": "implemented-and-tested",
+    "MeanPool": "implemented-and-tested",
     "Flatten": "implemented-and-tested",
     "Reshape": "implemented-and-tested",
     "Add": "implemented-and-tested",
-    "Multiply": "partial",
+    "Multiply": "implemented-and-tested",
     "Concat": "implemented-and-tested",
     "ResidualAdd": "implemented-and-tested",
     "Architecture": "implemented-and-tested",
@@ -75,12 +86,23 @@ NODE_IMPLEMENTATION_STATUS = {
     "LMHead": "implemented-and-tested",
     "MultiHeadAttention": "implemented-and-tested",
     "CausalSelfAttention": "implemented-and-tested",
+    "CrossAttention": "implemented-and-tested",
+    "GroupedQueryAttention": "implemented-and-tested",
+    "MultiQueryAttention": "implemented-and-tested",
+    "AdditiveAttention": "implemented-and-tested",
+    "LinearAttention": "implemented-and-tested",
+    "ScaledDotProductAttention": "implemented-and-tested",
+    # Maps to PyTorch's fused SDPA kernel on CPU instead of a CUDA flash kernel.
+    "FlashAttention": "partial",
     "PreNormTransformerBlock": "implemented-and-tested",
+    "VisionTransformerBlock": "implemented-and-tested",
+    "TransformerEncoder": "implemented-and-tested",
     "MLP": "implemented-and-tested",
     "FeedForward": "implemented-and-tested",
     "SwiGLU": "implemented-and-tested",
     "LearnedPositionEmbedding": "implemented-and-tested",
     "SinusoidalPositionEmbedding": "implemented-and-tested",
+    "RotaryPositionEmbedding": "implemented-and-tested",
     "LayerScale": "implemented-and-tested",
 }
 
@@ -94,8 +116,9 @@ CATEGORY_COLORS = {
 }
 SMALL_NODES = {
     "Input", "Output", "Identity", "Linear", "AutoLinear", "LMHead",
-    "LayerNorm", "RMSNorm", "BatchNorm1d", "Dropout", "ReLU", "GELU",
-    "SiLU", "Sigmoid", "Tanh", "Softmax", "Add", "Multiply", "ResidualAdd",
+    "LayerNorm", "RMSNorm", "BatchNorm1d", "BatchNorm2d", "GroupNorm",
+    "Dropout", "ReLU", "GELU", "SiLU", "Sigmoid", "Tanh", "Softmax",
+    "Add", "Multiply", "ResidualAdd", "SelectToken", "MeanPool",
 }
 LARGE_NODES = {
     "Architecture", "Quantizer", "MLP", "FeedForward", "SwiGLU",
@@ -115,6 +138,15 @@ NODE_GEOMETRY_OVERRIDES = {
     "LMHead": {"width": 144, "height": 62},
 }
 NODE_COLOR_OVERRIDES = {"Quantizer": "#EA580C", "LMHead": "#7C3AED"}
+# Score kernels understood by _ProjectedAttention, exposed as separate catalog nodes.
+ATTENTION_MODES = {"scaled-dot", "flash", "linear", "additive"}
+ATTENTION_NODE_MODES = {
+    "ScaledDotProductAttention": "scaled-dot", "FlashAttention": "flash",
+    "LinearAttention": "linear", "AdditiveAttention": "additive",
+}
+# Nodes that consume more than one named tensor port: node type -> required target ports.
+PORT_MODULE_INPUTS = {"CrossAttention": ("input", "input_b")}
+PORT_ALIASES = {"context": "input_b"}
 
 
 def _catalog_entry(name: str, category: str) -> dict[str, Any]:
@@ -236,6 +268,71 @@ def validate_graph(graph: GraphDef) -> list[str]:
                 kv = cfg.get("num_kv_heads", 2)
                 if not isinstance(kv, int) or kv < 1 or heads % kv:
                     errors.append(f"Node '{node.id}': num_heads must be divisible by num_kv_heads.")
+        if node.type in {"ScaledDotProductAttention", "FlashAttention", "LinearAttention", "AdditiveAttention"}:
+            width, heads = cfg.get("d_model", 512), cfg.get("num_heads", 8)
+            kv = cfg.get("num_kv_heads")
+            if not isinstance(width, int) or not isinstance(heads, int) or width < 1 or heads < 1 or width % heads:
+                errors.append(f"Node '{node.id}': d_model must be divisible by num_heads.")
+            elif kv is not None and (isinstance(kv, bool) or not isinstance(kv, int) or kv < 1 or heads % kv):
+                errors.append(f"Node '{node.id}': num_heads must be divisible by num_kv_heads.")
+        if node.type in {"VisionTransformerBlock", "TransformerEncoder", "CrossAttention"}:
+            width, heads = cfg.get("d_model", 512), cfg.get("num_heads", 8)
+            if not isinstance(width, int) or not isinstance(heads, int) or width < 1 or heads < 1 or width % heads:
+                errors.append(f"Node '{node.id}': d_model must be divisible by num_heads.")
+            ratio = cfg.get("mlp_ratio", 4)
+            if isinstance(ratio, bool) or not isinstance(ratio, (int, float)) or ratio <= 0:
+                errors.append(f"Node '{node.id}': mlp_ratio must be a positive number.")
+            if node.type == "TransformerEncoder":
+                layers = cfg.get("num_layers", 2)
+                if isinstance(layers, bool) or not isinstance(layers, int) or layers < 1:
+                    errors.append(f"Node '{node.id}': num_layers must be a positive integer.")
+        if node.type == "RotaryPositionEmbedding":
+            width, heads = cfg.get("d_model", 512), cfg.get("num_heads", 8)
+            if (not isinstance(width, int) or not isinstance(heads, int) or width < 1 or heads < 1
+                    or width % heads or (width // heads) % 2):
+                errors.append(f"Node '{node.id}': RoPE needs d_model divisible by num_heads with an even head width.")
+        if node.type == "Conv2d":
+            kernel = cfg.get("kernel_size", 3)
+            dims = [cfg.get("in_channels", 3), cfg.get("out_channels", 16)]
+            dims += kernel if isinstance(kernel, list) else [kernel]
+            if any(isinstance(v, bool) or not isinstance(v, int) or v < 1 for v in dims):
+                errors.append(f"Node '{node.id}': Conv2d channels and kernel size must be positive integers.")
+        if node.type in {"MaxPool2d", "AvgPool2d"}:
+            kernel, stride = cfg.get("kernel_size", 2), cfg.get("stride", cfg.get("kernel_size", 2))
+            dims = (kernel if isinstance(kernel, list) else [kernel]) + (stride if isinstance(stride, list) else [stride])
+            if any(isinstance(v, bool) or not isinstance(v, int) or v < 1 for v in dims):
+                errors.append(f"Node '{node.id}': {node.type} kernel size and stride must be positive integers.")
+        if node.type == "AdaptiveAvgPool2d":
+            size = cfg.get("output_size", 1)
+            dims = size if isinstance(size, list) else [size]
+            if not dims or any(isinstance(v, bool) or not isinstance(v, int) or v < 1 for v in dims):
+                errors.append(f"Node '{node.id}': output_size must be a positive integer or a pair of them.")
+        if node.type == "BatchNorm2d":
+            features = cfg.get("num_features", cfg.get("num_channels", 16))
+            if isinstance(features, bool) or not isinstance(features, int) or features < 1:
+                errors.append(f"Node '{node.id}': num_features must be a positive integer.")
+        if node.type == "GroupNorm":
+            groups, channels = cfg.get("num_groups", 8), cfg.get("num_channels", 16)
+            if any(isinstance(v, bool) or not isinstance(v, int) or v < 1 for v in (groups, channels)) or channels % groups:
+                errors.append(f"Node '{node.id}': num_channels must be divisible by num_groups.")
+        if node.type == "PatchEmbedding":
+            dims = [cfg.get("in_channels", 3), cfg.get("d_model", cfg.get("embed_dim", 768)), cfg.get("patch_size", 16)]
+            if any(isinstance(v, bool) or not isinstance(v, int) or v < 1 for v in dims):
+                errors.append(f"Node '{node.id}': in_channels, d_model and patch_size must be positive integers.")
+        if node.type == "ClassToken":
+            dims = [cfg.get("d_model", cfg.get("embed_dim", 768)), cfg.get("num_tokens", 1)]
+            if any(isinstance(v, bool) or not isinstance(v, int) or v < 1 for v in dims):
+                errors.append(f"Node '{node.id}': d_model and num_tokens must be positive integers.")
+        if node.type in {"SelectToken", "MeanPool"}:
+            keys = ("index", "dim") if node.type == "SelectToken" else ("dim",)
+            for key in keys:
+                value = cfg.get(key, 0 if key == "index" else -2)
+                if isinstance(value, bool) or not isinstance(value, int):
+                    errors.append(f"Node '{node.id}': {key} must be an integer.")
+        if node.type == "Dropout":
+            p = cfg.get("p", 0.1)
+            if isinstance(p, bool) or not isinstance(p, (int, float)) or not 0.0 <= p < 1.0:
+                errors.append(f"Node '{node.id}': dropout p must be in [0, 1).")
     incoming: dict[str, list[EdgeDef]] = defaultdict(list)
     for edge in graph.edges:
         if edge.source not in by_id:
@@ -254,6 +351,8 @@ def validate_graph(graph: GraphDef) -> list[str]:
             errors.append(f"Node '{node.id}' ({node.type}) requires exactly two incoming edges.")
         if node.type == "Concat" and len(incoming[node.id]) < 2:
             errors.append(f"Node '{node.id}' (Concat) requires at least two incoming edges.")
+        if node.type == "CrossAttention" and not any(e.target_port in {"input_b", "context"} for e in incoming[node.id]):
+            errors.append(f"Node '{node.id}' (CrossAttention) needs a query edge on 'input' and a context edge on 'input_b'.")
         if node.type == "Reshape":
             target_shape = node.config.get("shape")
             if not isinstance(target_shape, list) or not target_shape or any(not isinstance(d, int) or d == 0 or d < -1 for d in target_shape) or sum(d == -1 for d in target_shape) > 1:
@@ -314,8 +413,12 @@ def infer_shapes(graph: GraphDef, input_shape: list[int] | None = None) -> dict[
             shapes[node.id] = [x[0], None if x[2] is None or x[3] is None else (x[2] // p) * (x[3] // p), cfg.get("d_model", 768)]
         elif kind == "ClassToken" and x and len(x) >= 3:
             result = list(x)
-            result[-2] = None if result[-2] is None else result[-2] + 1
+            result[-2] = None if result[-2] is None else result[-2] + cfg.get("num_tokens", 1)
             shapes[node.id] = result
+        elif kind in {"SelectToken", "MeanPool"} and x and len(x) >= 3:
+            axis = cfg.get("dim", -2)
+            axis = axis if axis >= 0 else len(x) + axis
+            shapes[node.id] = [d for i, d in enumerate(x) if i != axis] if 0 <= axis < len(x) else None
         elif kind == "Flatten" and x:
             start = cfg.get("start_dim", 1)
             end = cfg.get("end_dim", -1)
@@ -347,12 +450,17 @@ def infer_shapes(graph: GraphDef, input_shape: list[int] | None = None) -> dict[
             h = None if x[2] is None else (x[2] + 2 * padding - kernel) // stride + 1
             w = None if x[3] is None else (x[3] + 2 * padding - kernel) // stride + 1
             shapes[node.id] = [x[0], cfg.get("out_channels", 16), h, w]
-        elif kind == "MaxPool2d" and x and len(x) == 4:
+        elif kind in {"MaxPool2d", "AvgPool2d"} and x and len(x) == 4:
             kernel = cfg.get("kernel_size", 2)
             stride = cfg.get("stride", kernel)
             kernel = kernel[0] if isinstance(kernel, list) else kernel
             stride = stride[0] if isinstance(stride, list) else stride
             shapes[node.id] = [x[0], x[1], None if x[2] is None else (x[2] - kernel) // stride + 1, None if x[3] is None else (x[3] - kernel) // stride + 1]
+        elif kind == "AdaptiveAvgPool2d" and x and len(x) == 4:
+            size = cfg.get("output_size", 1)
+            sizes = size if isinstance(size, list) else [size, size]
+            sizes = sizes * 2 if len(sizes) == 1 else sizes
+            shapes[node.id] = [x[0], x[1], sizes[0], sizes[1]]
         elif kind == "Architecture" and x:
             architecture = cfg.get("architecture")
             ac = cfg.get("config", {})
@@ -364,12 +472,15 @@ def infer_shapes(graph: GraphDef, input_shape: list[int] | None = None) -> dict[
                 shapes[node.id] = [x[0], ac.get("num_classes", 10)]
             else:
                 shapes[node.id] = None
-        elif kind in {"LayerNorm", "RMSNorm", "BatchNorm1d", "Dropout", "Identity", "ReLU", "GELU", "SiLU", "Sigmoid", "Tanh", "Softmax", "MultiHeadAttention", "CausalSelfAttention", "GroupedQueryAttention", "MultiQueryAttention", "FlashAttention", "PreNormTransformerBlock", "TransformerEncoder", "VisionTransformerBlock", "MLP", "FeedForward", "SwiGLU", "LayerScale", "RotaryPositionEmbedding", "SinusoidalPositionEmbedding", "LearnedPositionEmbedding"}:
+        elif kind == "CrossAttention":
+            query_edges = [e for e in incoming[node.id] if e.target_port not in {"input_b", "context"}]
+            shapes[node.id] = shapes.get(query_edges[0].source) if query_edges else None
+        elif kind in {"LayerNorm", "RMSNorm", "BatchNorm1d", "BatchNorm2d", "GroupNorm", "Dropout", "Identity", "ReLU", "GELU", "SiLU", "Sigmoid", "Tanh", "Softmax", "MultiHeadAttention", "CausalSelfAttention", "GroupedQueryAttention", "MultiQueryAttention", "AdditiveAttention", "LinearAttention", "ScaledDotProductAttention", "FlashAttention", "PreNormTransformerBlock", "TransformerEncoder", "VisionTransformerBlock", "MLP", "FeedForward", "SwiGLU", "LayerScale", "RotaryPositionEmbedding", "SinusoidalPositionEmbedding", "LearnedPositionEmbedding"}:
             shapes[node.id] = x
         else:
             shapes[node.id] = None
     return {"shapes": shapes, "outputs": {n.id: shapes.get(n.id) for n in graph.nodes if n.type == "Output"},
-            "note": "Advisory shape inference only; confirm behavior with runtime inference."}
+            "note": "Advisory shape inference only; POST /api/v1/graphs/verify runs a probe batch to prove it."}
 
 
 class _MLP(nn.Module):
@@ -502,8 +613,240 @@ class _LayerScale(nn.Module):
         return x * self.gamma
 
 
+class _PatchEmbedding(nn.Module):
+    """Turn an image batch into tokens: [batch, C, H, W] -> [batch, (H//p)*(W//p), d_model]."""
+
+    def __init__(self, in_channels: int, d_model: int, patch_size: int):
+        super().__init__()
+        if min(in_channels, d_model, patch_size) < 1:
+            raise ValueError("in_channels, d_model and patch_size must be positive integers.")
+        self.projection = nn.Conv2d(in_channels, d_model, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        if images.ndim != 4:
+            raise ValueError(f"PatchEmbedding expects [batch, channels, height, width], got {list(images.shape)}.")
+        if images.shape[1] != self.projection.in_channels:
+            raise ValueError(f"PatchEmbedding expects {self.projection.in_channels} channels, got {images.shape[1]}.")
+        patch = self.projection.kernel_size[0] if isinstance(self.projection.kernel_size, tuple) else self.projection.kernel_size
+        if images.shape[2] % patch or images.shape[3] % patch:
+            raise ValueError(f"Image size {images.shape[2]}x{images.shape[3]} is not divisible by patch size {patch}.")
+        return self.projection(images).flatten(2).transpose(1, 2)
+
+
+class _ClassToken(nn.Module):
+    """Prepend learnable, batch-broadcast tokens (a single [CLS] token by default)."""
+
+    def __init__(self, d_model: int, num_tokens: int = 1, std: float = 0.02):
+        super().__init__()
+        if d_model < 1 or num_tokens < 1:
+            raise ValueError("d_model and num_tokens must be positive integers.")
+        self.tokens = nn.Parameter(std * torch.randn(1, num_tokens, d_model))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.ndim != 3:
+            raise ValueError(f"ClassToken expects [batch, sequence, d_model], got {list(x.shape)}.")
+        if x.shape[-1] != self.tokens.shape[-1]:
+            raise ValueError(f"ClassToken expects width {self.tokens.shape[-1]}, got {x.shape[-1]}.")
+        return torch.cat([self.tokens.expand(x.shape[0], -1, -1), x], dim=-2)
+
+
+class _SelectToken(nn.Module):
+    """Read one position off the sequence axis, e.g. index 0 for the [CLS] output."""
+
+    def __init__(self, index: int = 0, dim: int = -2):
+        super().__init__()
+        self.index, self.dim = index, dim
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        axis = self.dim if self.dim >= 0 else x.ndim + self.dim
+        if not 0 <= axis < x.ndim:
+            raise ValueError(f"SelectToken dim {self.dim} is out of range for a rank-{x.ndim} tensor.")
+        position = self.index if self.index >= 0 else x.shape[axis] + self.index
+        if not 0 <= position < x.shape[axis]:
+            raise ValueError(f"SelectToken index {self.index} is out of range for a length-{x.shape[axis]} axis.")
+        return x.index_select(axis, torch.tensor([position], device=x.device)).squeeze(axis)
+
+
+class _MeanPool(nn.Module):
+    """Average over one axis (the token axis by default)."""
+
+    def __init__(self, dim: int = -2):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x.mean(dim=self.dim)
+
+
+class _RotaryPositionEmbedding(nn.Module):
+    """Rotate query/key feature pairs by position-dependent angles (RoPE)."""
+
+    def __init__(self, d_model: int, num_heads: int = 8, base: float = 10000.0):
+        super().__init__()
+        if d_model < 1 or num_heads < 1 or d_model % num_heads or (d_model // num_heads) % 2:
+            raise ValueError("RoPE needs d_model divisible by num_heads with an even head width.")
+        self.num_heads, self.head_dim = num_heads, d_model // num_heads
+        inv_freq = 1.0 / (base ** (torch.arange(0, self.head_dim, 2, dtype=torch.float32) / self.head_dim))
+        self.register_buffer("inv_freq", inv_freq)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.ndim != 3 or x.shape[-1] != self.num_heads * self.head_dim:
+            raise ValueError(f"RotaryPositionEmbedding expects [batch, sequence, {self.num_heads * self.head_dim}].")
+        batch, length, _ = x.shape
+        positions = torch.arange(length, device=x.device, dtype=torch.float32)
+        angles = torch.outer(positions, self.inv_freq.to(device=x.device, dtype=torch.float32))
+        cos = angles.cos().repeat_interleave(2, dim=-1)
+        sin = angles.sin().repeat_interleave(2, dim=-1)
+        half = self.head_dim // 2
+        heads = x.view(batch, length, self.num_heads, self.head_dim).transpose(1, 2)
+        rotated = torch.cat((-heads[..., half:], heads[..., :half]), dim=-1)
+        out = heads * cos + rotated * sin
+        return out.transpose(1, 2).reshape(batch, length, self.num_heads * self.head_dim)
+
+
+class _ProjectedAttention(nn.Module):
+    """Attention over [batch, sequence, d_model] with a selectable score kernel.
+
+    ``mode`` picks the maths: explicit softmax (``scaled-dot``), PyTorch's fused
+    ``scaled_dot_product_attention`` kernel (``flash``), a softmax-free kernel-feature
+    approximation (``linear``) or additive/Bahdanau scoring (``additive``). Fewer key/value
+    heads than query heads gives grouped-query attention, and one gives multi-query.
+    Passing ``context`` turns the same module into cross-attention.
+    """
+
+    def __init__(self, d_model: int, num_heads: int, num_kv_heads: int | None = None,
+                 mode: str = "scaled-dot", causal: bool = False, dropout: float = 0.0):
+        super().__init__()
+        if mode not in ATTENTION_MODES:
+            raise ValueError(f"Unknown attention mode '{mode}'; expected one of {sorted(ATTENTION_MODES)}.")
+        if d_model < 1 or num_heads < 1 or d_model % num_heads:
+            raise ValueError("d_model must be positive and divisible by num_heads.")
+        if not 0.0 <= dropout < 1.0:
+            raise ValueError("dropout must be in [0, 1).")
+        kv_heads = num_kv_heads or num_heads
+        if kv_heads < 1 or num_heads % kv_heads:
+            raise ValueError("num_heads must be divisible by num_kv_heads.")
+        self.mode, self.causal, self.dropout_p = mode, causal, dropout
+        self.num_heads, self.kv_heads = num_heads, kv_heads
+        self.head_dim = d_model // num_heads
+        kv_width = self.head_dim * kv_heads
+        self.query = nn.Linear(d_model, d_model)
+        self.key = nn.Linear(d_model, kv_width, bias=False)
+        self.value = nn.Linear(d_model, kv_width, bias=False)
+        self.projection = nn.Linear(d_model, d_model)
+        self.score = (
+            nn.Parameter(torch.randn(self.head_dim) / math.sqrt(self.head_dim))
+            if mode == "additive" else None
+        )
+
+    @staticmethod
+    def _split(tensor: torch.Tensor, heads: int) -> torch.Tensor:
+        batch, length, width = tensor.shape
+        return tensor.view(batch, length, heads, width // heads).transpose(1, 2)
+
+    @staticmethod
+    def _merge(tensor: torch.Tensor) -> torch.Tensor:
+        batch, heads, length, head_dim = tensor.shape
+        return tensor.transpose(1, 2).reshape(batch, length, heads * head_dim)
+
+    def _scores(self, query: torch.Tensor, key: torch.Tensor) -> torch.Tensor:
+        if self.mode == "additive":
+            pair = torch.tanh(query.unsqueeze(-2) + key.unsqueeze(-3))
+            return (pair * self.score).sum(dim=-1) / math.sqrt(self.head_dim)
+        if self.mode == "linear":
+            features_q = torch.nn.functional.elu(query) + 1.0
+            features_k = torch.nn.functional.elu(key) + 1.0
+            return (features_q @ features_k.transpose(-1, -2)) / query.shape[2]
+        return (query @ key.transpose(-1, -2)) / math.sqrt(self.head_dim)
+
+    def forward(self, x: torch.Tensor, context: torch.Tensor | None = None) -> torch.Tensor:
+        if x.ndim != 3:
+            raise ValueError("Attention expects [batch, sequence, features].")
+        context = x if context is None else context
+        if context.ndim != 3:
+            raise ValueError("Cross-attention context expects [batch, sequence, features].")
+        query = self._split(self.query(x), self.num_heads)
+        key = self._split(self.key(context), self.kv_heads)
+        value = self._split(self.value(context), self.kv_heads)
+        if self.kv_heads != self.num_heads:
+            repeat = self.num_heads // self.kv_heads
+            key = key.repeat_interleave(repeat, dim=1)
+            value = value.repeat_interleave(repeat, dim=1)
+        mask = None
+        if self.causal:
+            mask = torch.ones(query.shape[2], key.shape[2], dtype=torch.bool, device=x.device)
+            mask = torch.triu(mask, diagonal=key.shape[2] - query.shape[2] + 1)
+        if self.mode == "flash":
+            # SDPA blends an additive float mask into the scores; a bool mask is applied with
+            # conventions that differ across backends, so convert explicitly.
+            attention_mask = None if mask is None else torch.zeros(
+                mask.shape, dtype=query.dtype, device=query.device).masked_fill(mask, float("-inf"))
+            attended = torch.nn.functional.scaled_dot_product_attention(
+                query, key, value, attn_mask=attention_mask,
+                dropout_p=self.dropout_p if self.training else 0.0,
+            )
+            return self.projection(self._merge(attended))
+        scores = self._scores(query, key)
+        if mask is not None:
+            scores = scores.masked_fill(mask, 0.0 if self.mode == "linear" else float("-inf"))
+        if self.mode == "linear":
+            attended = (scores @ value) / scores.sum(dim=-1, keepdim=True).clamp_min(1e-6)
+        else:
+            weights = torch.softmax(scores, dim=-1)
+            if self.training and self.dropout_p > 0:
+                weights = torch.nn.functional.dropout(weights, p=self.dropout_p)
+            attended = weights @ value
+        return self.projection(self._merge(attended))
+
+
+class _VisionTransformerBlock(nn.Module):
+    """Post-norm ViT block: x + attention(LN(x)) followed by x + MLP(LN(x))."""
+
+    def __init__(self, d_model: int, num_heads: int, mlp_ratio: float = 4.0,
+                 dropout: float = 0.0, causal: bool = False):
+        super().__init__()
+        hidden = int(round(d_model * mlp_ratio))
+        if hidden < 1:
+            raise ValueError("mlp_ratio must produce a positive hidden width.")
+        self.norm1 = nn.LayerNorm(d_model)
+        self.attention = _ProjectedAttention(d_model, num_heads, mode="scaled-dot", causal=causal, dropout=dropout)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.ffn = _FeedForward(d_model, hidden, dropout)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x + self.dropout(self.attention(self.norm1(x)))
+        return x + self.dropout(self.ffn(self.norm2(x)))
+
+
+class _TransformerEncoderStack(nn.Module):
+    """Repeated transformer blocks with an optional trailing LayerNorm."""
+
+    def __init__(self, d_model: int, num_layers: int, num_heads: int, mlp_ratio: float = 4.0,
+                 dropout: float = 0.0, causal: bool = False, norm_first: bool = False,
+                 final_norm: bool = True):
+        super().__init__()
+        if num_layers < 1:
+            raise ValueError("num_layers must be a positive integer.")
+        blocks = []
+        for _ in range(num_layers):
+            if norm_first:
+                blocks.append(_PreNormTransformerBlock(d_model, num_heads, int(mlp_ratio), dropout, causal))
+            else:
+                blocks.append(_VisionTransformerBlock(d_model, num_heads, mlp_ratio, dropout, causal))
+        self.layers = nn.Sequential(*blocks)
+        self.final_norm = nn.LayerNorm(d_model) if final_norm else nn.Identity()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.final_norm(self.layers(x))
+
+
 class CompiledGraph(nn.Module):
-    """Initial executable subset; architecture nodes are expanded incrementally."""
+    """Compile a catalogued graph into real PyTorch modules and run it in topological order.
+
+    Set ``shape_log`` to a dict before a forward pass to capture the executed shape of
+    every node, including merges and I/O nodes.
+    """
     def __init__(self, graph: GraphDef):
         super().__init__()
         self.graph = graph
@@ -586,15 +929,79 @@ class CompiledGraph(nn.Module):
                 modules[self.keys[n.id]] = _LayerScale(
                     c.get("d_model", 128), c.get("init_value", 1e-5)
                 )
+            elif t == "BatchNorm2d":
+                modules[self.keys[n.id]] = nn.BatchNorm2d(c.get("num_features", c.get("num_channels", 16)))
+            elif t == "GroupNorm":
+                modules[self.keys[n.id]] = nn.GroupNorm(c.get("num_groups", 8), c.get("num_channels", 16))
+            elif t == "AvgPool2d":
+                modules[self.keys[n.id]] = nn.AvgPool2d(
+                    c.get("kernel_size", 2), stride=c.get("stride", c.get("kernel_size", 2)),
+                    padding=c.get("padding", 0),
+                )
+            elif t == "AdaptiveAvgPool2d":
+                size = c.get("output_size", 1)
+                if isinstance(size, list) and len(size) == 1:
+                    size = size * 2
+                modules[self.keys[n.id]] = nn.AdaptiveAvgPool2d(size)
+            elif t == "PatchEmbedding":
+                modules[self.keys[n.id]] = _PatchEmbedding(
+                    c.get("in_channels", 3), c.get("d_model", c.get("embed_dim", 768)), c.get("patch_size", 16)
+                )
+            elif t == "ClassToken":
+                modules[self.keys[n.id]] = _ClassToken(
+                    c.get("d_model", c.get("embed_dim", 768)), c.get("num_tokens", 1)
+                )
+            elif t == "SelectToken":
+                modules[self.keys[n.id]] = _SelectToken(c.get("index", 0), c.get("dim", -2))
+            elif t == "MeanPool":
+                modules[self.keys[n.id]] = _MeanPool(c.get("dim", -2))
+            elif t == "VisionTransformerBlock":
+                modules[self.keys[n.id]] = _VisionTransformerBlock(
+                    c.get("d_model", 768), c.get("num_heads", 12), c.get("mlp_ratio", 4),
+                    c.get("dropout", 0.0), c.get("causal", False),
+                )
+            elif t == "TransformerEncoder":
+                modules[self.keys[n.id]] = _TransformerEncoderStack(
+                    c.get("d_model", 768), c.get("num_layers", 12), c.get("num_heads", 12),
+                    c.get("mlp_ratio", 4), c.get("dropout", 0.0), c.get("causal", False),
+                    c.get("norm_first", False), c.get("final_norm", True),
+                )
+            elif t == "GroupedQueryAttention":
+                modules[self.keys[n.id]] = _ProjectedAttention(
+                    c.get("d_model", 512), c.get("num_heads", 8), c.get("num_kv_heads", 2),
+                    causal=c.get("causal", True), dropout=c.get("dropout", 0.0),
+                )
+            elif t == "MultiQueryAttention":
+                modules[self.keys[n.id]] = _ProjectedAttention(
+                    c.get("d_model", 512), c.get("num_heads", 8), 1,
+                    causal=c.get("causal", True), dropout=c.get("dropout", 0.0),
+                )
+            elif t == "CrossAttention":
+                modules[self.keys[n.id]] = _ProjectedAttention(
+                    c.get("d_model", 512), c.get("num_heads", 8),
+                    causal=c.get("causal", False), dropout=c.get("dropout", 0.0),
+                )
+            elif t in {"ScaledDotProductAttention", "FlashAttention", "LinearAttention", "AdditiveAttention"}:
+                modules[self.keys[n.id]] = _ProjectedAttention(
+                    c.get("d_model", 512), c.get("num_heads", 8),
+                    c.get("num_kv_heads"), ATTENTION_NODE_MODES[t],
+                    c.get("causal", False), c.get("dropout", 0.0),
+                )
+            elif t == "RotaryPositionEmbedding":
+                modules[self.keys[n.id]] = _RotaryPositionEmbedding(
+                    c.get("d_model", 512), c.get("num_heads", 8), c.get("base", 10000.0)
+                )
             elif t == "Architecture":
                 try:
                     modules[self.keys[n.id]] = build_architecture(c.get("architecture"), c.get("config", {}))
                 except (TypeError, ValueError) as exc:
                     raise ValueError(f"Invalid architecture config on node '{n.id}': {exc}") from exc
-            else: raise ValueError(f"Node '{n.id}' ({t}) is catalogued but not yet executable in this initial compiler.")
+            else: raise ValueError(f"Node '{n.id}' ({t}) has no executor in this compiler; see its status in GET /api/v1/nodes.")
         self.modules_by_key = nn.ModuleDict(modules)
+        self.port_nodes = {n.id: PORT_MODULE_INPUTS[n.type] for n in nodes if n.type in PORT_MODULE_INPUTS}
         self.incoming: dict[str, list[EdgeDef]] = defaultdict(list)
         for edge in graph.edges: self.incoming[edge.target].append(edge)
+        self.shape_log: dict[str, list[int]] | None = None
 
     def forward(self, x: torch.Tensor, extra_inputs: dict[str, torch.Tensor] | None = None):
         values = {}
@@ -620,8 +1027,18 @@ class CompiledGraph(nn.Module):
             elif node.type == "Concat":
                 dim = node.config.get("dim", -1)
                 values[node.id] = torch.cat(edge_values, dim=dim)
+            elif node.id in self.port_nodes:
+                by_port = {PORT_ALIASES.get(e.target_port, e.target_port): values[e.source]
+                           for e in self.incoming[node.id]}
+                missing = [port for port in self.port_nodes[node.id] if port not in by_port]
+                if missing:
+                    raise ValueError(f"Node '{node.id}' ({node.type}) needs an incoming edge on port '{missing[0]}'.")
+                values[node.id] = self.modules_by_key[self.keys[node.id]](by_port["input"], by_port["input_b"])
             else:
                 values[node.id] = self.modules_by_key[self.keys[node.id]](edge_values[0])
+        if self.shape_log is not None:
+            self.shape_log.update({key: list(value.shape)
+                                   for key, value in values.items() if isinstance(value, torch.Tensor)})
         outputs = [values[n.id] for n in self.graph.nodes if n.type == "Output"]
         return outputs[0] if len(outputs) == 1 else tuple(outputs)
 
@@ -648,6 +1065,23 @@ MODEL_STORE: dict[str, nn.Module] = {}
 class QuantizationRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=100)
     dtype: str = Field(min_length=1, max_length=20)
+
+
+def _probe_tensor(node: NodeDef, consumers: list[NodeDef], batch_size: int,
+                  sample: list[int] | None) -> torch.Tensor:
+    """Build one deterministic CPU probe batch for an Input node.
+
+    Token inputs (anything feeding an embedding node) get integer ids bounded by the
+    smallest vocabulary in the graph; every other input gets standard normals.
+    """
+    dims = sample if sample is not None else node.config.get("shape", [1])
+    shape = [1 if int(d) == -1 else int(d) for d in dims]
+    vocab_nodes = [c for c in consumers if c.type in {"Embedding", "TokenEmbedding"}]
+    if vocab_nodes:
+        vocab = min(int(c.config.get("num_embeddings", c.config.get("vocab_size", 1000)))
+                    for c in vocab_nodes)
+        return torch.randint(0, max(vocab, 1), (batch_size, *shape))
+    return torch.randn(batch_size, *shape)
 
 
 def _logical_parameter_count(model: nn.Module) -> int:
@@ -735,11 +1169,88 @@ def validate(payload: GraphDef):
 
 
 @app.post("/api/v1/graphs/infer-shapes")
-def graph_shapes(payload: GraphDef, input_shape: list[int] | None = None):
+def graph_shapes(payload: GraphDef, input_shape: list[int] | None = Query(default=None)):
     errors = validate_graph(payload)
     if errors: raise HTTPException(status_code=400, detail={"errors": errors})
     try: return infer_shapes(payload, input_shape)
     except Exception as exc: raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/v1/graphs/verify")
+def verify_graph(payload: GraphDef, input_shape: list[int] | None = Query(default=None),
+                 batch_size: int = Query(default=1)):
+    """Prove a graph executes: compile it and run one probe batch on CPU.
+
+    ``/graphs/infer-shapes`` only predicts shapes. This endpoint builds the model and
+    actually runs it, so ``verified: true`` means the graph executes as drawn. Pass
+    ``input_shape`` including the batch dimension, or just ``batch_size`` (1-64) to use
+    the sample shapes configured on the Input nodes.
+    """
+    errors = validate_graph(payload)
+    if errors:
+        raise HTTPException(status_code=400, detail={"errors": errors})
+    if input_shape:
+        batch = min(max(int(input_shape[0]), 1), 64)
+        primary_sample = list(input_shape[1:])
+    else:
+        batch = min(max(int(batch_size), 1), 64)
+        primary_sample = None
+
+    node_by_id = {node.id: node for node in payload.nodes}
+    consumers: dict[str, list[NodeDef]] = defaultdict(list)
+    for edge in payload.edges:
+        target = node_by_id.get(edge.target)
+        if target is not None:
+            consumers[edge.source].append(target)
+
+    torch.manual_seed(0)
+    inputs = [node for node in payload.nodes if node.type == "Input"]
+    probes = {
+        node.id: _probe_tensor(node, consumers[node.id], batch,
+                               primary_sample if index == 0 else None)
+        for index, node in enumerate(inputs)
+    }
+    try:
+        model = CompiledGraph(payload).eval()
+    except Exception as exc:  # Reported, not raised: a failed build is the answer.
+        return {"verified": False, "stage": "compile", "errors": [str(exc)]}
+    model.shape_log = {}
+    try:
+        with torch.no_grad():
+            outputs = model(probes[inputs[0].id],
+                            extra_inputs={k: v for k, v in probes.items() if k != inputs[0].id})
+    except Exception as exc:
+        return {"verified": False, "stage": "execution", "errors": [str(exc)]}
+
+    executed = model.shape_log or {}
+    # Compare against the advisory preview using the real batch, but only when every Input
+    # node shares a sample shape; a single preview shape cannot describe heterogeneous inputs.
+    sample_shapes = {tuple(tensor.shape[1:]) for tensor in probes.values()}
+    preview = infer_shapes(payload, list(next(iter(probes.values())).shape) if len(sample_shapes) == 1 else None)
+    mismatches = [
+        {"node": node_id, "advisory": list(predicted), "executed": list(executed[node_id])}
+        for node_id, predicted in preview["shapes"].items()
+        if predicted is not None and node_id in executed
+        and all(dim is not None for dim in predicted) and list(predicted) != list(executed[node_id])
+    ]
+    statuses = {entry["type"]: entry["status"] for entry in CATALOG}
+    unproven = sorted({f"{node.type}: {statuses.get(node.type, 'metadata-only')}"
+                       for node in payload.nodes
+                       if statuses.get(node.type) != "implemented-and-tested"})
+    output_shapes = [list(o.shape) for o in outputs] if isinstance(outputs, tuple) else [list(outputs.shape)]
+    return {
+        "verified": True,
+        "stage": "executed",
+        "errors": [],
+        "batch_size": batch,
+        "input_shapes": {node_id: list(tensor.shape) for node_id, tensor in probes.items()},
+        "output_shapes": output_shapes,
+        "parameter_count": _logical_parameter_count(model),
+        "node_shapes": executed,
+        "advisory_mismatches": mismatches,
+        "unproven_nodes": unproven,
+        "note": "Executed once on CPU with a probe batch; this confirms shapes, not training accuracy.",
+    }
 
 
 @app.post("/api/v1/models/export")

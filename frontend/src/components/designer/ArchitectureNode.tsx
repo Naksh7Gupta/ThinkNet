@@ -22,6 +22,7 @@ import {
 import {
   diagramColor,
   diagramLabel,
+  isDualInputType,
   isMergeType,
   isMultiInputType,
   type ThinkNetNode,
@@ -200,7 +201,7 @@ export function ArchitectureNode({
   const multi = isMultiInputType(typeName);
   const isInput = typeName === "Input";
   const isOutput = typeName === "Output";
-  const isConcat = typeName === "Concat";
+  const dualInput = isDualInputType(typeName);
 
   const Icon = CATEGORY_ICONS[category] ?? Box;
 
@@ -297,7 +298,7 @@ export function ArchitectureNode({
         </>
       )}
 
-      {isConcat && (
+      {dualInput && (
         <>
           <Handle
             id="input"
@@ -462,7 +463,7 @@ function DiagramNode({
   const multi = isMultiInputType(typeName);
   const isInput = typeName === "Input";
   const isOutput = typeName === "Output";
-  const isConcat = typeName === "Concat";
+  const dualInput = isDualInputType(typeName);
 
   const palette = diagramColor(typeName, data.catalog?.color);
   const label = data.label ?? diagramLabel(typeName);
@@ -521,7 +522,7 @@ function DiagramNode({
         </>
       )}
 
-      {isConcat && (
+      {dualInput && (
         <>
           <Handle
             id="input"

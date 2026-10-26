@@ -7,9 +7,11 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import {
   architectureGraph,
+  cnnComponentGraph,
   decoderComponentGraph,
   exampleMlpGraph,
   exampleResidualGraph,
+  vitComponentGraph,
 } from "@/lib/graph";
 import { parseIntList } from "@/lib/node-config";
 import { cn } from "@/lib/utils";
@@ -132,6 +134,18 @@ export function DesignerToolbar({
               loadGraph(layout.graph, catalogByType, layout);
               return;
             }
+            const vit = /^vit-components-(\d+)$/.exec(value);
+            if (vit) {
+              const layout = vitComponentGraph(Number(vit[1]));
+              loadGraph(layout.graph, catalogByType, layout);
+              return;
+            }
+            const cnn = /^cnn-components-(\d+)$/.exec(value);
+            if (cnn) {
+              const layout = cnnComponentGraph({ channels: Number(cnn[1]) });
+              loadGraph(layout.graph, catalogByType, layout);
+              return;
+            }
             if (value === "mlp-layers") loadGraph(exampleMlpGraph(), catalogByType);
             if (value === "residual") loadGraph(exampleResidualGraph(), catalogByType);
             if (architectures.some((item) => item.name === value)) {
@@ -144,6 +158,11 @@ export function DesignerToolbar({
           <option value="decoder-components-1">Decoder Transformer: 1 block (like diagram)</option>
           <option value="decoder-components-2">Decoder Transformer: 2 blocks</option>
           <option value="decoder-components-4">Decoder Transformer: 4 blocks</option>
+          <option value="cnn-components-8">CNN from nodes: 4 conv blocks (compact)</option>
+          <option value="cnn-components-32">CNN from nodes: 4 conv blocks (preset width)</option>
+          <option value="vit-components-1">ViT from nodes: 1 block, [CLS] readout</option>
+          <option value="vit-components-2">ViT from nodes: 2 blocks, [CLS] readout</option>
+          <option value="vit-components-4">ViT from nodes: 4 blocks, [CLS] readout</option>
           <option value="mlp-layers">Layer graph: Linear MLP</option>
           <option value="residual">Layer graph: ResidualAdd</option>
           {architectures.map((item) => (

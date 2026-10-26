@@ -10,11 +10,15 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo } from "react";
 import { ArchitectureNode } from "@/components/designer/ArchitectureNode";
-import { TENSOR_NODE_TYPE, type ThinkNetNode } from "@/lib/graph";
+import { BlockFrameNode } from "@/components/designer/BlockFrameNode";
+import { FRAME_NODE_TYPE, TENSOR_NODE_TYPE, type ThinkNetNode } from "@/lib/graph";
 import { useDesignerStore } from "@/store/designer-store";
 import type { CatalogNode } from "@/types/api";
 
-const nodeTypes = { [TENSOR_NODE_TYPE]: ArchitectureNode };
+const nodeTypes = {
+  [TENSOR_NODE_TYPE]: ArchitectureNode,
+  [FRAME_NODE_TYPE]: BlockFrameNode,
+};
 
 export function DesignerCanvas({ catalog }: { catalog: CatalogNode[] }) {
   const nodes = useDesignerStore((s) => s.nodes);
@@ -78,7 +82,7 @@ export function DesignerCanvas({ catalog }: { catalog: CatalogNode[] }) {
         onDrop={onDrop}
         fitView
         deleteKeyCode={["Delete", "Backspace"]}
-        minZoom={0.25}
+        minZoom={0.15}
         maxZoom={1.75}
         defaultEdgeOptions={{ type: "smoothstep" }}
         selectionOnDrag
@@ -90,7 +94,11 @@ export function DesignerCanvas({ catalog }: { catalog: CatalogNode[] }) {
         <MiniMap
           pannable
           zoomable
-          nodeColor={(node) => node.data.catalog?.color ?? "#94A3B8"}
+          nodeColor={(node) => {
+            if (node.type === FRAME_NODE_TYPE) return "transparent";
+            const data = node.data as ThinkNetNode["data"] | undefined;
+            return data?.catalog?.color ?? "#94A3B8";
+          }}
         />
       </ReactFlow>
       {nodes.length === 0 && (

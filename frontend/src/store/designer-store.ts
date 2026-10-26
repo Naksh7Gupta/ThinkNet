@@ -6,6 +6,7 @@ import {
   isMergeType,
   MODEL_TRANSFORM_TYPES,
   toGraphDef,
+  type LayoutInput,
   type ThinkNetEdge,
   type ThinkNetNode,
 } from "@/lib/graph";
@@ -31,7 +32,11 @@ type DesignerState = {
   onConnect: (connection: Connection) => void;
   addCatalogNode: (catalog: CatalogNode, position?: { x: number; y: number }) => void;
   updateNodeConfig: (id: string, config: Record<string, unknown>) => void;
-  loadGraph: (graph: GraphDef, catalogByType: Map<string, CatalogNode>) => void;
+  loadGraph: (
+    graph: GraphDef,
+    catalogByType: Map<string, CatalogNode>,
+    layout?: LayoutInput,
+  ) => void;
   getGraph: () => GraphDef;
   setValidation: (value: ValidationResponse | null) => void;
   setShapePreview: (value: ShapePreviewResponse | null) => void;
@@ -136,8 +141,8 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
         node.id === id ? { ...node, data: { ...node.data, config } } : node,
       ),
     }),
-  loadGraph: (graph, catalogByType) => {
-    const flow = graphDefToFlow(graph, catalogByType);
+  loadGraph: (graph, catalogByType, layout) => {
+    const flow = graphDefToFlow(graph, catalogByType, layout);
     set({
       graphName: graph.name,
       nodes: flow.nodes,

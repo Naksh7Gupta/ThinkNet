@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import {
   architectureGraph,
+  decoderComponentGraph,
   exampleMlpGraph,
   exampleResidualGraph,
 } from "@/lib/graph";
@@ -117,11 +118,18 @@ export function DesignerToolbar({
       <div className={cn(pill, "gap-2 pl-3")}>
         <Boxes className="h-4 w-4 text-accent-foreground" />
         <select
-          className="h-full max-w-44 rounded-lg border-0 bg-transparent pr-2 text-sm outline-none"
+          className="h-full max-w-64 rounded-lg border-0 bg-transparent pr-2 text-sm outline-none"
           defaultValue=""
           onChange={(event) => {
             const value = event.target.value;
             event.target.value = "";
+
+            const components = /^decoder-components-(\d+)$/.exec(value);
+            if (components) {
+              const layout = decoderComponentGraph(Number(components[1]));
+              loadGraph(layout.graph, catalogByType, layout);
+              return;
+            }
             if (value === "mlp-layers") loadGraph(exampleMlpGraph(), catalogByType);
             if (value === "residual") loadGraph(exampleResidualGraph(), catalogByType);
             if (architectures.some((item) => item.name === value)) {
@@ -131,6 +139,9 @@ export function DesignerToolbar({
           aria-label="Load example"
         >
           <option value="">Template: load example…</option>
+          <option value="decoder-components-1">Decoder Transformer: 1 block (like diagram)</option>
+          <option value="decoder-components-2">Decoder Transformer: 2 blocks</option>
+          <option value="decoder-components-4">Decoder Transformer: 4 blocks</option>
           <option value="mlp-layers">Layer graph: Linear MLP</option>
           <option value="residual">Layer graph: ResidualAdd</option>
           {architectures.map((item) => (

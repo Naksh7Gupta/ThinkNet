@@ -69,6 +69,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Language Model": "#79B6A2",
 };
 
+const SKIP_COLOR = "#D6A76C";
+
 function statusLabel(status: string | undefined): string {
   if (status === "implemented-and-tested") return "TESTED";
   if (status === "partial") return "PARTIAL";
@@ -186,6 +188,7 @@ export function ArchitectureNode({
   const typeName = data.typeName;
   const color = catalog?.color ?? CATEGORY_COLORS[category] ?? "#999999";
 
+  const vertical = Boolean(data.vertical);
   const merge = isMergeType(typeName);
   const multi = isMultiInputType(typeName);
   const isInput = typeName === "Input";
@@ -217,6 +220,15 @@ export function ArchitectureNode({
     border: "2px solid #202020",
   };
 
+  // Horizontal layout: data flows left to right.
+  // Vertical layout: data flows bottom to top (like the decoder diagram),
+  // and skip connections enter/leave on the right side.
+  const inPosition = vertical ? Position.Bottom : Position.Left;
+  const outPosition = vertical ? Position.Top : Position.Right;
+  const along = (pct: string): React.CSSProperties =>
+    vertical ? { left: pct } : { top: pct };
+  const centered: React.CSSProperties = vertical ? {} : { top: "50%" };
+
   return (
     <div
       className={cn(
@@ -236,8 +248,8 @@ export function ArchitectureNode({
         <Handle
           id="input"
           type="target"
-          position={Position.Left}
-          style={{ ...socketStyle, top: "50%" }}
+          position={inPosition}
+          style={{ ...socketStyle, ...centered }}
         />
       )}
 
@@ -246,17 +258,17 @@ export function ArchitectureNode({
           <Handle
             id="main"
             type="target"
-            position={Position.Left}
-            style={{ ...socketStyle, top: "36%" }}
+            position={inPosition}
+            style={{ ...socketStyle, ...(vertical ? {} : { top: "36%" }) }}
           />
           <Handle
             id="skip"
             type="target"
-            position={Position.Left}
+            position={vertical ? Position.Right : Position.Left}
             style={{
               ...socketStyle,
-              top: "72%",
-              background: "#D6A76C",
+              top: vertical ? "70%" : "72%",
+              background: SKIP_COLOR,
             }}
           />
         </>
@@ -267,17 +279,17 @@ export function ArchitectureNode({
           <Handle
             id="input"
             type="target"
-            position={Position.Left}
-            style={{ ...socketStyle, top: "35%" }}
+            position={inPosition}
+            style={{ ...socketStyle, ...along("35%") }}
           />
           <Handle
             id="input_b"
             type="target"
-            position={Position.Left}
+            position={inPosition}
             style={{
               ...socketStyle,
-              top: "72%",
-              background: "#D6A76C",
+              ...along(vertical ? "65%" : "72%"),
+              background: SKIP_COLOR,
             }}
           />
         </>
@@ -378,8 +390,22 @@ export function ArchitectureNode({
         <Handle
           id="output"
           type="source"
+          position={outPosition}
+          style={{ ...socketStyle, ...centered }}
+        />
+      )}
+
+      {/* Vertical layout only: side output used to draw skip connections. */}
+      {vertical && !isOutput && (
+        <Handle
+          id="skip_out"
+          type="source"
           position={Position.Right}
-          style={{ ...socketStyle, top: "50%" }}
+          style={{
+            ...socketStyle,
+            top: merge ? "30%" : "50%",
+            background: SKIP_COLOR,
+          }}
         />
       )}
     </div>

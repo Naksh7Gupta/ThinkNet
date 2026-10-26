@@ -19,7 +19,13 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { isMergeType, isMultiInputType, type ThinkNetNode } from "@/lib/graph";
+import {
+  diagramColor,
+  diagramLabel,
+  isMergeType,
+  isMultiInputType,
+  type ThinkNetNode,
+} from "@/lib/graph";
 import {
   fieldsForNode,
   readConfigValue,
@@ -182,6 +188,7 @@ export function ArchitectureNode({
   selected,
 }: NodeProps<ThinkNetNode>) {
   const shape = useDesignerStore((s) => s.lastShapePreview?.shapes?.[id]);
+  const diagramView = useDesignerStore((s) => s.diagramView);
 
   const catalog = data.catalog;
   const category = catalog?.category ?? "Node";
@@ -219,6 +226,22 @@ export function ArchitectureNode({
     background: color,
     border: "2px solid #202020",
   };
+
+  if (diagramView || vertical) {
+    return (
+      <DiagramNode
+        data={data}
+        selected={selected}
+        shapeLabel={
+          shape === undefined
+            ? null
+            : shape === null
+              ? "shape unknown"
+              : `[${shape.map((dimension) => dimension ?? "?").join(", ")}]`
+        }
+      />
+    );
+  }
 
   // Horizontal layout: data flows left to right.
   // Vertical layout: data flows bottom to top (like the decoder diagram),
@@ -407,6 +430,187 @@ export function ArchitectureNode({
             background: SKIP_COLOR,
           }}
         />
+      )}
+    </div>
+  );
+}
+const diagramCenter: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "100%",
+  height: "100%",
+};
+
+/**
+ * Flat, compact representation used by diagram view: one coloured box per
+ * operation and a disc for summation nodes, like the textbook transformer
+ * diagram. Node configuration moves to the inspector in this mode.
+ */
+function DiagramNode({
+  data,
+  selected,
+  shapeLabel,
+}: {
+  data: ThinkNetNode["data"];
+  selected?: boolean;
+  shapeLabel: string | null;
+}) {
+  const { typeName, vertical } = data;
+
+  const merge = isMergeType(typeName);
+  const multi = isMultiInputType(typeName);
+  const isInput = typeName === "Input";
+  const isOutput = typeName === "Output";
+  const isConcat = typeName === "Concat";
+
+  const palette = diagramColor(typeName, data.catalog?.color);
+  const label = data.label ?? diagramLabel(typeName);
+
+  const socket = {
+    width: 8,
+    height: 8,
+    background: "#98A1B4",
+    border: "1px solid #12151B",
+  };
+
+  const inPosition = vertical ? Position.Bottom : Position.Left;
+  const outPosition = vertical ? Position.Top : Position.Right;
+  const skipInPosition = vertical ? Position.Right : Position.Left;
+  const along = (pct: string): React.CSSProperties => (vertical ? { left: pct } : { top: pct });
+  const centered: React.CSSProperties = vertical ? {} : { top: "50%" };
+
+  const shell: React.CSSProperties = {
+    ...diagramCenter,
+    background: palette.fill,
+    color: palette.text,
+    border: `1px solid ${selected ? "#F0A944" : "rgba(0,0,0,0.38)"}`,
+    boxShadow: selected
+      ? "0 0 0 2px #F0A944"
+      : "0 1px 3px rgba(0,0,0,0.45)",
+  };
+
+  return (
+    <div
+      className="overflow-visible"
+      style={{ position: "relative", width: "100%", height: "100%" }}
+    >
+      {!isInput && !merge && !multi && (
+        <Handle
+          id="input"
+          type="target"
+          position={inPosition}
+          style={{ ...socket, ...centered }}
+        />
+      )}
+
+      {merge && (
+        <>
+          <Handle
+            id="main"
+            type="target"
+            position={inPosition}
+            style={{ ...socket, ...(vertical ? {} : { top: "36%" }) }}
+          />
+          <Handle
+            id="skip"
+            type="target"
+            position={skipInPosition}
+            style={{ ...socket, top: "72%", background: SKIP_COLOR }}
+          />
+        </>
+      )}
+
+      {isConcat && (
+        <>
+          <Handle
+            id="input"
+            type="target"
+            position={inPosition}
+            style={{ ...socket, ...along("35%") }}
+          />
+          <Handle
+            id="input_b"
+            type="target"
+            position={inPosition}
+            style={{ ...socket, ...along(vertical ? "65%" : "72%"), background: SKIP_COLOR }}
+          />
+        </>
+      )}
+
+      {!isOutput && (
+        <Handle
+          id="output"
+          type="source"
+          position={outPosition}
+          style={{ ...socket, ...centered }}
+        />
+      )}
+
+      {/* Side source used to draw skip connections without crossing the chain. */}
+      {vertical && !isOutput && (
+        <Handle
+          id="skip_out"
+          type="source"
+          position={Position.Right}
+          style={{ ...socket, top: merge ? "26%" : "50%", background: SKIP_COLOR }}
+        />
+      )}
+
+      {merge ? (
+        <div
+          title={`${typeName}${shapeLabel ? ` — ${shapeLabel}` : ""}`}
+          style={{
+            ...shell,
+            borderRadius: "50%",
+            fontSize: 15,
+            fontWeight: 600,
+            lineHeight: 1,
+          }}
+        >
+          {label}
+        </div>
+      ) : (
+        <div
+          title={`${typeName}${shapeLabel ? ` — ${shapeLabel}` : ""}`}
+          style={{ ...shell, borderRadius: 4, padding: "0 8px" }}
+        >
+          <span
+            style={{
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontSize: 11.5,
+              fontWeight: 500,
+              letterSpacing: "0.1px",
+              textAlign: "center",
+            }}
+          >
+            {label}
+          </span>
+        </div>
+      )}
+
+      {shapeLabel && (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: "100%",
+            marginTop: 2,
+            textAlign: "center",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
+            fontSize: 8.5,
+            lineHeight: 1,
+            color: "#9AA3B8",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+          }}
+        >
+          {shapeLabel}
+        </div>
       )}
     </div>
   );

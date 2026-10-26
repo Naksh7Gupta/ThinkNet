@@ -1,0 +1,10 @@
+
+> thinknet@0.1.0 dev
+> vite
+
+[31merror when starting dev server:
+Error: Port 1420 is already in use
+    at Server.onError$1 (file:///C:/Users/hp/Desktop/Projects/ThinkNet/frontend/node_modules/vite/dist/node/chunks/config.js:15174:28)
+    at Server.emit (node:events:519:28)
+    at emitErrorNT (node:net:1977:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)[39m

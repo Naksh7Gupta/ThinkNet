@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { useReactFlow, useViewport } from "@xyflow/react";
-import { Boxes, CheckCircle2, Download, Minus, Play, Plus, ScanSearch } from "lucide-react";
+import { Boxes, CheckCircle2, Download, Minimize2, Minus, Play, Plus, ScanSearch } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,8 @@ export function DesignerToolbar({
   const setLastError = useDesignerStore((s) => s.setLastError);
   const setLastNote = useDesignerStore((s) => s.setLastNote);
   const addModel = useDesignerStore((s) => s.addModel);
+  const diagramView = useDesignerStore((s) => s.diagramView);
+  const setDiagramView = useDesignerStore((s) => s.setDiagramView);
   const [runtimeShape, setRuntimeShape] = useState("");
   const { zoomIn, zoomOut } = useReactFlow();
   const { zoom } = useViewport();
@@ -161,6 +163,20 @@ export function DesignerToolbar({
       />
 
       <div className="ml-auto flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          aria-pressed={diagramView}
+          title="Show flat boxes and summation discs instead of full node cards"
+          onClick={() => setDiagramView(!diagramView)}
+          className={cn(
+            pill,
+            "gap-2 px-3 text-muted-foreground transition-colors hover:text-foreground",
+            diagramView && "border-[#f0a944] text-[#f0a944]",
+          )}
+        >
+          <Minimize2 className="h-4 w-4" />
+          Diagram
+        </button>
         <div className={cn(pill, "overflow-hidden")}>
           <button
             type="button"

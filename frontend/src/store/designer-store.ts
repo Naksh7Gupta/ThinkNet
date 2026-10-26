@@ -2,9 +2,12 @@ import { applyEdgeChanges, applyNodeChanges, type Connection, type EdgeChange, t
 import { create } from "zustand";
 import {
   createNodeFromCatalog,
+  FRAME_NODE_TYPE,
   graphDefToFlow,
   isMergeType,
   MODEL_TRANSFORM_TYPES,
+  nodeSizeFor,
+  styleEdges,
   toGraphDef,
   type LayoutInput,
   type ThinkNetEdge,
@@ -46,6 +49,9 @@ type DesignerState = {
   removeModel: (modelId: string) => void;
   setInspectedModel: (modelId: string | null) => void;
   clearLibraryNotice: () => void;
+  /** Flat boxes + "+" discs instead of full node cards. */
+  diagramView: boolean;
+  setDiagramView: (value: boolean) => void;
 };
 
 function nextId(typeName: string, nodes: ThinkNetNode[]): string {
@@ -54,6 +60,25 @@ function nextId(typeName: string, nodes: ThinkNetNode[]): string {
   const used = new Set(nodes.map((node) => node.id));
   while (used.has(`${base}_${i}`)) i += 1;
   return `${base}_${i}`;
+}
+
+/**
+ * Applies the presentation-mode footprint to every tensor node. Vertical
+ * layouts already bake diagram spacing into their positions, so their sizes
+ * stay untouched; frames are decorative and never resize.
+ */
+function sizeNodes(nodes: ThinkNetNode[], diagram: boolean): ThinkNetNode[] {
+  return nodes.map((node) =>
+    node.type === FRAME_NODE_TYPE || node.data.vertical
+      ? node
+      : {
+          ...node,
+          style: {
+            ...node.style,
+            ...nodeSizeFor(node.data.typeName, node.data.catalog, diagram),
+          },
+        },
+  );
 }
 
 export const useDesignerStore = create<DesignerState>((set, get) => ({
@@ -69,7 +94,16 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   models: [],
   inspectedModel: null,
   canvasRevision: 0,
+  diagramView: false,
   setGraphName: (graphName) => set({ graphName }),
+  setDiagramView: (value) => {
+    const nodes = sizeNodes(get().nodes, value);
+    set({
+      diagramView: value,
+      nodes,
+      edges: styleEdges(get().edges, nodes, value),
+    });
+  },
   setSelectedNodeId: (selectedNodeId) => set({ selectedNodeId }),
   onNodesChange: (changes) => {
     const nodes = applyNodeChanges(changes, get().nodes) as ThinkNetNode[];
@@ -114,7 +148,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       sourceHandle: connection.sourceHandle ?? "output",
       targetHandle,
     };
-    set({ edges: [...get().edges, edge] });
+    set({ edges: styleEdges([...get().edges, edge], get().nodes, get().diagramView) });
   },
   addCatalogNode: (catalog, position) => {
     if (MODEL_TRANSFORM_TYPES.has(catalog.type) || catalog.execution_domain === "model-transform") {
@@ -124,11 +158,16 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       });
       return;
     }
-    const node = createNodeFromCatalog(
-      catalog,
-      position ?? { x: 120 + get().nodes.length * 24, y: 80 + get().nodes.length * 18 },
-      nextId(catalog.type, get().nodes),
-    );
+    const node = sizeNodes(
+      [
+        createNodeFromCatalog(
+          catalog,
+          position ?? { x: 120 + get().nodes.length * 24, y: 80 + get().nodes.length * 18 },
+          nextId(catalog.type, get().nodes),
+        ),
+      ],
+      get().diagramView,
+    )[0];
     set({
       nodes: [...get().nodes, node],
       selectedNodeId: node.id,
@@ -143,10 +182,12 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     }),
   loadGraph: (graph, catalogByType, layout) => {
     const flow = graphDefToFlow(graph, catalogByType, layout);
+    const diagram = get().diagramView;
+    const nodes = sizeNodes(flow.nodes, diagram);
     set({
       graphName: graph.name,
-      nodes: flow.nodes,
-      edges: flow.edges,
+      nodes,
+      edges: styleEdges(flow.edges, nodes, diagram),
       selectedNodeId: null,
       lastValidation: null,
       lastShapePreview: null,

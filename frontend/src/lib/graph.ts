@@ -1,4 +1,4 @@
-import type { Edge, Node } from "@xyflow/react";
+import { MarkerType, type Edge, type Node } from "@xyflow/react";
 import type { CatalogNode, GraphDef } from "@/types/api";
 import { defaultConfigForType } from "@/lib/node-config";
 
@@ -13,6 +13,8 @@ export type ThinkNetNodeData = {
   catalog?: CatalogNode;
   /** Bottom-to-top data flow with skip handles on the right, like the decoder diagram. */
   vertical?: boolean;
+  /** Diagram caption shown on the node body; the graph payload always keeps `typeName`. */
+  label?: string;
   /** Caption rendered by a block frame node. */
   frameLabel?: string;
 };
@@ -255,6 +257,11 @@ export function architectureGraph(name: string): GraphDef {
   }
 }
 
+/**
+ * Converts a backend GraphDef into React Flow state using the live catalog.
+ * `layout` accepts either a plain id → position map or a full layout produced by
+ * {@link decoderComponentGraph} (positions + decorative block frames + flow direction).
+ */
 export function graphDefToFlow(
   graph: GraphDef,
   catalogByType: Map<string, CatalogNode>,
@@ -278,61 +285,139 @@ export function graphDefToFlow(
 
   const nodes: ThinkNetNode[] = graph.nodes.map((node, index) => {
     const catalog = catalogByType.get(node.type);
-    const width = catalog?.width ?? 176;
+    const size = nodeSizeFor(node.type, catalog, vertical);
     const column = index % 3;
     const row = Math.floor(index / 3);
     return {
       id: node.id,
       type: TENSOR_NODE_TYPE,
-      position: positions[node.id] ?? { x: 80 + column * 260, y: 80 + row * 140 },
-      style: { width },
+      position:
+        positions[node.id] ??
+        (vertical
+          ? {
+              x: VERTICAL_COLUMN_X + (VERTICAL_COLUMN_WIDTH - size.width) / 2,
+              y: 60 + index * (diagramSize(node.type).height + VERTICAL_GAP),
+            }
+          : { x: 80 + column * 260, y: 80 + row * 140 }),
+      style: { ...size },
       data: {
         typeName: node.type,
         config: { ...node.config },
         catalog,
-        ...(vertical ? { vertical: true } : {}),
+        ...(vertical ? { vertical: true, label: diagramLabel(node.type) } : {}),
       },
     };
   });
 
-  const edges: ThinkNetEdge[] = graph.edges.map((edge, index) => ({
-    id: `e-${edge.source}-${edge.target}-${index}`,
-    source: edge.source,
-    target: edge.target,
-    sourceHandle: edge.source_port,
-    targetHandle: edge.target_port,
-  }));
+  const edges: ThinkNetEdge[] = graph.edges.map((edge, index) => {
+    const base: ThinkNetEdge = {
+      id: `e_${edge.source}_${edge.source_port}_${edge.target}_${edge.target_port}_${index}`,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.source_port,
+      targetHandle: edge.target_port,
+    };
+    return vertical ? diagramEdge(base) : base;
+  });
 
   return { nodes: [...frameNodes, ...nodes], edges };
 }
 
-const SKIP_SOURCE_PORT = "skip_out";
+/* ------------------------------------------------------------------ *
+ * Compact diagram presentation
+ *
+ * Any graph — a preset, a backend architecture or one built from scratch —
+ * can render as the flat, small boxes from textbook transformer diagrams
+ * instead of the full node cards, so long stacks fit on one screen. The
+ * GraphDef payload is untouched: `typeName` stays the catalog type and
+ * `label` is only a canvas caption.
+ * ------------------------------------------------------------------ */
 
-// Rendered body heights of ArchitectureNode: 31px title + inline config rows + 25px footer,
-// floored by the node's minimum height. Used only to stack the vertical template.
-const VERTICAL_NODE_HEIGHTS: Record<string, number> = {
-  Input: 91,
-  Output: 64,
-  ResidualAdd: 64,
-  LayerNorm: 122,
-  TokenEmbedding: 122,
-  LearnedPositionEmbedding: 122,
-  CausalSelfAttention: 151,
-  FeedForward: 151,
-  LMHead: 151,
+/** Flat box size for every diagram node. */
+export const DIAGRAM_BOX = { width: 168, height: 38 };
+
+/** Merge nodes collapse to a small "+" disc, like the summation circles in the diagram. */
+export const DIAGRAM_DISC = { width: 30, height: 30 };
+
+/** Captions used on the canvas; unknown types fall back to their type name. */
+export const DIAGRAM_LABELS: Record<string, string> = {
+  Input: "Input Vectors",
+  Output: "Output Tokens",
+  TokenEmbedding: "Token Embedding",
+  FixedPositionEmbedding: "Positional Embedding",
+  LearnedPositionEmbedding: "Positional Embedding",
+  LayerNorm: "Layer Norm",
+  CausalSelfAttention: "Masked Self Attention",
+  FeedForward: "FNN Layers",
+  LMHead: "Classification Head",
+  ResidualAdd: "+",
+  Add: "+",
+  Accumulate: "+",
+  Multiply: "×",
 };
 
-const VERTICAL_COLUMN_X = 60;
-const VERTICAL_NODE_WIDTH = 210;
-const VERTICAL_GAP = 56;
-const FRAME_PAD_LEFT = 26;
-const FRAME_PAD_RIGHT = 76;
-const FRAME_PAD_TOP = 34;
-const FRAME_PAD_BOTTOM = 30;
+/** Pastel fills from the reference diagram, readable on the dark canvas. */
+export const DIAGRAM_COLORS: Record<string, { fill: string; text: string }> = {
+  Input: { fill: "#F0C79B", text: "#3A2611" },
+  Output: { fill: "#BCD6EA", text: "#122836" },
+  TokenEmbedding: { fill: "#D6D6D6", text: "#222222" },
+  FixedPositionEmbedding: { fill: "#D6D6D6", text: "#222222" },
+  LearnedPositionEmbedding: { fill: "#D6D6D6", text: "#222222" },
+  LayerNorm: { fill: "#F4EDA4", text: "#35310E" },
+  CausalSelfAttention: { fill: "#EFBFB4", text: "#3A1A12" },
+  FeedForward: { fill: "#DAC9E8", text: "#291A36" },
+  LMHead: { fill: "#E7A79F", text: "#381411" },
+  ResidualAdd: { fill: "#8FD28F", text: "#12300F" },
+  Add: { fill: "#8FD28F", text: "#12300F" },
+  Accumulate: { fill: "#8FD28F", text: "#12300F" },
+  Multiply: { fill: "#8FD28F", text: "#12300F" },
+};
 
-function verticalNodeHeight(typeName: string): number {
-  return VERTICAL_NODE_HEIGHTS[typeName] ?? 92;
+export const DIAGRAM_EDGE_COLOR = "#C6CDDB";
+export const DIAGRAM_SKIP_EDGE_COLOR = "#D6A76C";
+
+export function diagramSize(typeName: string): { width: number; height: number } {
+  return isMergeType(typeName) ? DIAGRAM_DISC : DIAGRAM_BOX;
 }
+
+/**
+ * Canvas footprint of a node in the given presentation mode. Card mode keeps the
+ * catalog width and lets the body drive the height; diagram mode is fully fixed.
+ */
+export function nodeSizeFor(
+  typeName: string,
+  catalog: CatalogNode | undefined,
+  diagram: boolean,
+): { width: number; height?: number } {
+  if (diagram) return diagramSize(typeName);
+  // height: undefined clears a diagram height when switching back to cards.
+  return { width: catalog?.width ?? 176, height: undefined };
+}
+
+export function diagramLabel(typeName: string): string {
+  return DIAGRAM_LABELS[typeName] ?? typeName;
+}
+
+export function diagramColor(
+  typeName: string,
+  fallback?: string,
+): { fill: string; text: string } {
+  const known = DIAGRAM_COLORS[typeName];
+  if (known) return known;
+  return { fill: fallback ?? "#8A93A6", text: "#12151B" };
+}
+
+// Vertical templates bake diagram spacing straight into their positions, so the
+// compact footprint above is the only geometry they need.
+const SKIP_SOURCE_PORT = "skip_out";
+const VERTICAL_COLUMN_X = 60;
+/** Column the compact boxes are centred in; "+" discs are centred inside it. */
+const VERTICAL_COLUMN_WIDTH = DIAGRAM_BOX.width;
+const VERTICAL_GAP = 30;
+const FRAME_PAD_LEFT = 24;
+const FRAME_PAD_RIGHT = 72;
+const FRAME_PAD_TOP = 28;
+const FRAME_PAD_BOTTOM = 26;
 
 export type DecoderComponentLayout = {
   graph: GraphDef;
@@ -341,10 +426,50 @@ export type DecoderComponentLayout = {
   vertical: boolean;
 };
 
+/** Thin light line with a closed arrowhead; skip connections bend around the chain. */
+export function diagramEdge(edge: ThinkNetEdge): ThinkNetEdge {
+  const skip =
+    edge.targetHandle === "skip" ||
+    edge.targetHandle === "input_b" ||
+    edge.sourceHandle === SKIP_SOURCE_PORT;
+  const stroke = skip ? DIAGRAM_SKIP_EDGE_COLOR : DIAGRAM_EDGE_COLOR;
+  return {
+    ...edge,
+    type: skip ? "smoothstep" : "straight",
+    style: { stroke, strokeWidth: skip ? 1.5 : 1.6 },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      width: 11,
+      height: 11,
+      color: stroke,
+    },
+  };
+}
+
 /**
- * Decoder Transformer as individual components (one node per LayerNorm, attention,
- * feed-forward and residual add), stacked bottom-to-top with a dashed frame per block.
- * Mirrors backend/tests/test_decoder_components.py so the canvas output compiles as-is.
+ * Switches edge styling with the presentation mode. Vertical layouts keep the diagram
+ * styling even when diagram mode is off, because their nodes stay compact regardless.
+ */
+export function styleEdges(
+  edges: ThinkNetEdge[],
+  nodes: ThinkNetNode[],
+  diagram: boolean,
+): ThinkNetEdge[] {
+  const verticalIds = new Set(
+    nodes.filter((node) => node.data.vertical).map((node) => node.id),
+  );
+  return edges.map((edge) => {
+    if (diagram || verticalIds.has(edge.source) || verticalIds.has(edge.target)) {
+      return diagramEdge(edge);
+    }
+    return { ...edge, type: "smoothstep", style: undefined, markerEnd: undefined };
+  });
+}
+
+/**
+ * Builds a decoder stack out of individual component nodes (no black-box
+ * `Architecture` node), laid out bottom-to-top in compact diagram geometry so
+ * the whole stack reads like the textbook figure.
  */
 export function decoderComponentGraph(numBlocks: number): DecoderComponentLayout {
   const seq = 16;
@@ -355,12 +480,12 @@ export function decoderComponentGraph(numBlocks: number): DecoderComponentLayout
 
   const blocks = Math.max(1, Number.isFinite(numBlocks) ? Math.trunc(numBlocks) : 1);
   const graph: GraphDef = { name: `decoder-components-${blocks}`, nodes: [], edges: [] };
-  const chain: { id: string; height: number }[] = [];
+  const chain: { id: string; width: number; height: number }[] = [];
   const blockGroups: { label: string; ids: string[] }[] = [];
 
   const add = (id: string, typeName: string, config: Record<string, unknown> = {}) => {
     graph.nodes.push({ id, type: typeName, config });
-    chain.push({ id, height: verticalNodeHeight(typeName) });
+    chain.push({ id, ...diagramSize(typeName) });
     return id;
   };
 
@@ -427,18 +552,19 @@ export function decoderComponentGraph(numBlocks: number): DecoderComponentLayout
   const totalHeight =
     chain.reduce((sum, item) => sum + item.height, 0) + VERTICAL_GAP * (chain.length - 1);
   const positions: NodePositions = {};
-  const heightById: Record<string, number> = {};
+  const bodyById: Record<string, { y: number; height: number }> = {};
   let cursor = 0;
   for (const item of chain) {
-    heightById[item.id] = item.height;
     cursor += item.height;
-    positions[item.id] = { x: VERTICAL_COLUMN_X, y: totalHeight - cursor };
+    const y = totalHeight - cursor;
+    positions[item.id] = { x: VERTICAL_COLUMN_X + (VERTICAL_COLUMN_WIDTH - item.width) / 2, y };
+    bodyById[item.id] = { y, height: item.height };
     cursor += VERTICAL_GAP;
   }
 
   const frames: BlockFrame[] = blockGroups.map((group) => {
-    const tops = group.ids.map((id) => positions[id].y);
-    const bottoms = group.ids.map((id) => positions[id].y + heightById[id]);
+    const tops = group.ids.map((id) => bodyById[id].y);
+    const bottoms = group.ids.map((id) => bodyById[id].y + bodyById[id].height);
     const top = Math.min(...tops);
     const bottom = Math.max(...bottoms);
     return {
@@ -446,7 +572,7 @@ export function decoderComponentGraph(numBlocks: number): DecoderComponentLayout
       label: group.label,
       x: VERTICAL_COLUMN_X - FRAME_PAD_LEFT,
       y: top - FRAME_PAD_TOP,
-      width: VERTICAL_NODE_WIDTH + FRAME_PAD_LEFT + FRAME_PAD_RIGHT,
+      width: VERTICAL_COLUMN_WIDTH + FRAME_PAD_LEFT + FRAME_PAD_RIGHT,
       height: bottom - top + FRAME_PAD_TOP + FRAME_PAD_BOTTOM,
     };
   });

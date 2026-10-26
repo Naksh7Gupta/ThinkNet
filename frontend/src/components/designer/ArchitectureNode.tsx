@@ -49,17 +49,31 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   "Language Model": MessageSquare,
 };
 
-function statusLabel(status: string | undefined): string {
-  if (status === "implemented-and-tested") return "tested";
-  if (status === "partial") return "partial";
-  if (status === "metadata-only") return "catalog only";
-  return status ?? "";
-}
+const CATEGORY_COLORS: Record<string, string> = {
+  "I/O": "#80B7D8",
+  Utility: "#A7A7A7",
+  Core: "#8B8B8B",
+  Embedding: "#D98BCA",
+  Position: "#D6A76C",
+  Normalization: "#D6A76C",
+  Regularization: "#D6A76C",
+  Activation: "#E5C76B",
+  FFN: "#79B6A2",
+  Attention: "#729BE2",
+  Merge: "#A58AD8",
+  Transformer: "#729BE2",
+  Vision: "#B59AD8",
+  Shape: "#8DBD87",
+  Architecture: "#8BADD5",
+  "Model Transform": "#D49B79",
+  "Language Model": "#79B6A2",
+};
 
-function statusDot(status: string | undefined): string {
-  if (status === "implemented-and-tested") return "bg-success";
-  if (status === "partial") return "bg-warning";
-  return "bg-muted-foreground";
+function statusLabel(status: string | undefined): string {
+  if (status === "implemented-and-tested") return "TESTED";
+  if (status === "partial") return "PARTIAL";
+  if (status === "metadata-only") return "CATALOG";
+  return (status ?? "UNKNOWN").toUpperCase();
 }
 
 const INLINE_KINDS = new Set(["int", "float", "bool", "select"]);
@@ -75,39 +89,53 @@ function InlineField({
 }) {
   const update = useDesignerStore((s) => s.updateNodeConfig);
   const value = readConfigValue(config, field);
-  const box =
-    "nodrag nowheel h-6 w-[92px] rounded-md border border-border bg-background px-2 font-mono text-[11px] text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+  const controlClass =
+    "nodrag nowheel h-[23px] min-w-0 w-[94px] rounded-[4px] border border-[#454545] bg-[#292929] px-1.5 font-mono text-[11px] text-[#e6e6e6] outline-none focus:border-[#e7b85c]";
 
   function commit(event: React.FocusEvent<HTMLInputElement>) {
     const raw = event.target.value;
+
     if (raw === "") {
       update(nodeId, setConfigValue(config, field, undefined));
       return;
     }
-    const parsed = field.kind === "int" ? Number.parseInt(raw, 10) : Number(raw);
+
+    const parsed =
+      field.kind === "int" ? Number.parseInt(raw, 10) : Number(raw);
+
     if (Number.isNaN(parsed)) {
-      event.target.value = value === undefined || value === null ? "" : String(value);
+      event.target.value =
+        value === undefined || value === null ? "" : String(value);
       return;
     }
-    if (parsed !== value) update(nodeId, setConfigValue(config, field, parsed));
+
+    if (parsed !== value) {
+      update(nodeId, setConfigValue(config, field, parsed));
+    }
   }
 
   let control: React.ReactNode;
+
   if (field.kind === "bool") {
     control = (
       <input
         type="checkbox"
-        className="nodrag h-3.5 w-3.5 accent-[#6d5df6]"
+        className="nodrag h-3.5 w-3.5 accent-[#e7b85c]"
         checked={Boolean(value)}
-        onChange={(e) => update(nodeId, setConfigValue(config, field, e.target.checked))}
+        onChange={(e) =>
+          update(nodeId, setConfigValue(config, field, e.target.checked))
+        }
       />
     );
   } else if (field.kind === "select") {
     control = (
       <select
-        className={cn(box, "text-left")}
+        className={cn(controlClass, "text-left")}
         value={typeof value === "string" ? value : ""}
-        onChange={(e) => update(nodeId, setConfigValue(config, field, e.target.value))}
+        onChange={(e) =>
+          update(nodeId, setConfigValue(config, field, e.target.value))
+        }
       >
         {(field.options ?? []).map((option) => (
           <option key={option.value} value={option.value}>
@@ -121,11 +149,13 @@ function InlineField({
       <input
         key={String(value)}
         type="number"
-        className={cn(box, "text-right")}
+        className={cn(controlClass, "text-right")}
         step={field.step}
         min={field.min}
         max={field.max}
-        defaultValue={value === undefined || value === null ? "" : String(value)}
+        defaultValue={
+          value === undefined || value === null ? "" : String(value)
+        }
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
@@ -135,74 +165,152 @@ function InlineField({
   }
 
   return (
-    <div className="flex items-center justify-between gap-2 py-1">
-      <span className="truncate text-[12px] text-muted-foreground">{field.label}</span>
-      {control}
+    <div className="flex min-h-[29px] items-center justify-between gap-3 border-b border-[#383838] last:border-b-0">
+      <span className="min-w-0 truncate text-[11px] text-[#bcbcbc]">
+        {field.label}
+      </span>
+      <div className="flex shrink-0 items-center justify-end">{control}</div>
     </div>
   );
 }
 
-export function ArchitectureNode({ id, data, selected }: NodeProps<ThinkNetNode>) {
+export function ArchitectureNode({
+  id,
+  data,
+  selected,
+}: NodeProps<ThinkNetNode>) {
   const shape = useDesignerStore((s) => s.lastShapePreview?.shapes?.[id]);
+
   const catalog = data.catalog;
-  const color = catalog?.color ?? "#64748B";
+  const category = catalog?.category ?? "Node";
   const typeName = data.typeName;
+  const color = catalog?.color ?? CATEGORY_COLORS[category] ?? "#999999";
+
   const merge = isMergeType(typeName);
   const multi = isMultiInputType(typeName);
   const isInput = typeName === "Input";
   const isOutput = typeName === "Output";
-  const Icon = CATEGORY_ICONS[catalog?.category ?? ""] ?? Box;
+  const isConcat = typeName === "Concat";
+
+  const Icon = CATEGORY_ICONS[category] ?? Box;
 
   const fields = fieldsForNode(typeName, data.config, catalog);
+
   const editable = fields
     .filter(
-      (f) =>
-        INLINE_KINDS.has(f.kind) &&
-        !f.label.includes("(alias)") &&
-        f.key !== "architecture" &&
-        (f.kind !== "select" || (f.options?.length ?? 0) > 0),
+      (field) =>
+        INLINE_KINDS.has(field.kind) &&
+        !field.label.includes("(alias)") &&
+        field.key !== "architecture" &&
+        (field.kind !== "select" || (field.options?.length ?? 0) > 0),
     )
     .slice(0, 4);
-  const readOnly = fields.filter((f) => f.kind === "int-list").slice(0, 1);
+
+  const readOnly = fields
+    .filter((field) => field.kind === "int-list")
+    .slice(0, 1);
+
+  const socketStyle = {
+    width: 10,
+    height: 10,
+    background: color,
+    border: "2px solid #202020",
+  };
 
   return (
     <div
       className={cn(
-        "rounded-xl border bg-[#151a28]",
+        "relative min-w-[210px] overflow-visible rounded-[7px] border bg-[#303030] text-[#e6e6e6]",
+        "transition-[border-color,box-shadow] duration-100",
         selected
-          ? "border-primary shadow-[0_0_0_1px_#6d5df6,0_0_28px_rgba(109,93,246,0.35)]"
-          : "border-border shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
+          ? "border-[#f0a944] shadow-[0_0_0_1px_#f0a944]"
+          : "border-[#1c1c1c] shadow-[0_3px_8px_rgba(0,0,0,0.28)]",
       )}
-      style={{ minHeight: catalog?.height ?? 64 }}
+      style={{
+        minHeight: catalog?.height ?? 64,
+        borderTopWidth: 3,
+        borderTopColor: color,
+      }}
     >
-      {!isInput && !merge && !multi && <Handle id="input" type="target" position={Position.Left} />}
+      {!isInput && !merge && !multi && (
+        <Handle
+          id="input"
+          type="target"
+          position={Position.Left}
+          style={{ ...socketStyle, top: "50%" }}
+        />
+      )}
+
       {merge && (
         <>
-          <Handle id="main" type="target" position={Position.Left} style={{ top: "32%" }} />
-          <Handle id="skip" type="target" position={Position.Left} style={{ top: "68%" }} />
-        </>
-      )}
-      {typeName === "Concat" && (
-        <>
-          <Handle id="input" type="target" position={Position.Left} style={{ top: "32%" }} />
-          <Handle id="input_b" type="target" position={Position.Left} style={{ top: "68%" }} />
+          <Handle
+            id="main"
+            type="target"
+            position={Position.Left}
+            style={{ ...socketStyle, top: "36%" }}
+          />
+          <Handle
+            id="skip"
+            type="target"
+            position={Position.Left}
+            style={{
+              ...socketStyle,
+              top: "72%",
+              background: "#D6A76C",
+            }}
+          />
         </>
       )}
 
-      <div
-        className="flex items-center gap-2 rounded-t-[11px] border-b border-border/60 px-3 py-2"
-        style={{ background: `${color}1f` }}
-      >
-        <Icon className="h-4 w-4 shrink-0" style={{ color }} />
-        <span className="truncate text-[13px] font-semibold text-foreground">{typeName}</span>
-        <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-          <span className={cn("h-1.5 w-1.5 rounded-full", statusDot(catalog?.status))} />
-          {statusLabel(catalog?.status)}
+      {isConcat && (
+        <>
+          <Handle
+            id="input"
+            type="target"
+            position={Position.Left}
+            style={{ ...socketStyle, top: "35%" }}
+          />
+          <Handle
+            id="input_b"
+            type="target"
+            position={Position.Left}
+            style={{
+              ...socketStyle,
+              top: "72%",
+              background: "#D6A76C",
+            }}
+          />
+        </>
+      )}
+
+      {/* Blender-style title bar */}
+      <div className="flex h-[31px] items-center gap-2 rounded-t-[4px] border-b border-[#202020] bg-[#3b3b3b] px-2.5">
+        <Icon
+          className="h-[14px] w-[14px] shrink-0"
+          style={{ color }}
+        />
+
+        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold tracking-[0.1px]">
+          {typeName}
         </span>
+
+        <span
+          className="h-[6px] w-[6px] shrink-0 rounded-full"
+          title={statusLabel(catalog?.status)}
+          style={{
+            background:
+              catalog?.status === "implemented-and-tested"
+                ? "#79B87B"
+                : catalog?.status === "partial"
+                  ? "#E2B35D"
+                  : "#777777",
+          }}
+        />
       </div>
 
+      {/* Compact node properties */}
       {(editable.length > 0 || readOnly.length > 0) && (
-        <div className="divide-y divide-border/50 px-3 py-1">
+        <div className="px-2.5 py-1">
           {editable.map((field) => (
             <InlineField
               key={`${field.nestedPath ?? "root"}:${field.key}`}
@@ -211,28 +319,69 @@ export function ArchitectureNode({ id, data, selected }: NodeProps<ThinkNetNode>
               config={data.config}
             />
           ))}
-          {readOnly.map((field) => (
-            <div key={field.key} className="flex items-center justify-between gap-2 py-1">
-              <span className="text-[12px] text-muted-foreground">{field.label}</span>
-              <span className="font-mono text-[11px]">
-                [{Array.isArray(readConfigValue(data.config, field)) ? (readConfigValue(data.config, field) as unknown[]).join(", ") : ""}]
-              </span>
-            </div>
-          ))}
+
+          {readOnly.map((field) => {
+            const value = readConfigValue(data.config, field);
+
+            return (
+              <div
+                key={field.key}
+                className="flex min-h-[27px] items-center justify-between gap-2"
+              >
+                <span className="text-[11px] text-[#bcbcbc]">
+                  {field.label}
+                </span>
+                <span className="font-mono text-[10px] text-[#d6d6d6]">
+                  [
+                  {Array.isArray(value)
+                    ? value.join(", ")
+                    : ""}
+                  ]
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2 border-t border-border/50 px-3 py-1.5 text-[10px]">
-        <span className="uppercase tracking-wide text-muted-foreground">{catalog?.category ?? "Node"}</span>
-        {merge && <span className="text-muted-foreground">main / skip</span>}
+      {/* Node footer */}
+      <div className="flex min-h-[25px] items-center justify-between gap-2 border-t border-[#242424] bg-[#292929] px-2.5 py-1">
+        <span className="truncate text-[9px] font-medium uppercase tracking-[0.7px] text-[#a6a6a6]">
+          {category}
+        </span>
+
+        {merge && (
+          <span className="text-[9px] text-[#bdbdbd]">
+            main / skip
+          </span>
+        )}
+
         {shape !== undefined && (
-          <span className="font-mono text-success">
-            {shape === null ? "→ unknown" : `→ [${shape.map((d) => (d === null ? "?" : d)).join(", ")}]`}
+          <span
+            className={cn(
+              "truncate font-mono text-[10px]",
+              shape === null ? "text-[#e2b35d]" : "text-[#9ecb9e]",
+            )}
+          >
+            {shape === null
+              ? "→ unknown"
+              : `→ [${shape
+                  .map((dimension) =>
+                    dimension === null ? "?" : dimension,
+                  )
+                  .join(", ")}]`}
           </span>
         )}
       </div>
 
-      {!isOutput && <Handle id="output" type="source" position={Position.Right} />}
+      {!isOutput && (
+        <Handle
+          id="output"
+          type="source"
+          position={Position.Right}
+          style={{ ...socketStyle, top: "50%" }}
+        />
+      )}
     </div>
   );
 }

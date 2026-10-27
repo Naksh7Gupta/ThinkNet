@@ -32,6 +32,8 @@ _JOBS: dict[str, dict[str, Any]] = {}
 _LOCK = threading.Lock()
 _CANCEL: dict[str, threading.Event] = {}
 _TOKENIZERS: dict[str, Any] = {}
+# Guards the lazy `transformers` import plus the memoised load. See _load_tokenizer.
+_TOKENIZER_LOCK = threading.Lock()
 
 
 class TrainingJobRequest(BaseModel):
@@ -172,18 +174,37 @@ def _load_tokenizer(name: str):
     if cached is not None:
         return cached
 
-    from transformers import AutoTokenizer
+    # Importing transformers costs ~30s and it publishes its classes lazily, while Python
+    # happily hands a still-executing module to a second thread. A preflight or a second job
+    # that asks during that window gets "cannot import name 'AutoTokenizer' from
+    # 'transformers'". Import and load one at a time, re-checking the cache once the lock is
+    # ours, and retry once in case another importer left the package half-built.
+    with _TOKENIZER_LOCK:
+        with _LOCK:
+            cached = _TOKENIZERS.get(name)
+        if cached is not None:
+            return cached
 
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(name)
-    except Exception as exc:  # Network, typo, or a non-tokenizer repo id all land here.
-        raise ValueError(
-            f"Tokenizer '{name}' could not be loaded: {exc}. Use a Hugging Face tokenizer id "
-            "(for example 'gpt2') that is downloadable or already cached locally."
-        ) from exc
-    with _LOCK:
-        _TOKENIZERS[name] = tokenizer
-    return tokenizer
+        for attempt in (1, 2):
+            try:
+                from transformers import AutoTokenizer
+
+                break
+            except ImportError:
+                if attempt == 2:
+                    raise
+                time.sleep(1.0)
+
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(name)
+        except Exception as exc:  # Network, typo, or a non-tokenizer repo id all land here.
+            raise ValueError(
+                f"Tokenizer '{name}' could not be loaded: {exc}. Use a Hugging Face tokenizer id "
+                "(for example 'gpt2') that is downloadable or already cached locally."
+            ) from exc
+        with _LOCK:
+            _TOKENIZERS[name] = tokenizer
+        return tokenizer
 
 
 def _prepare_run(graph_payload: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:

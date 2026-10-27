@@ -1,0 +1,37 @@
+appId: com.thinknet.desktop
+productName: ThinkNet
+copyright: ThinkNet
+
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - dist/**
+  - electron/**
+  - build/icon.*
+  - package.json
+  - "!**/*.map"
+
+asar: true
+compression: normal
+
+win:
+  icon: build/icon.ico
+  target:
+    - portable
+    - nsis
+  artifactName: ${productName}-${version}-portable.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-portable.exe
+
+nsis:
+  artifactName: ${productName}-${version}-Setup.${ext}
+  oneClick: false
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: ThinkNet
+  installerLanguages:
+    - en

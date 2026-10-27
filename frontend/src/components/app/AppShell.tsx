@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DesignerWorkspace } from "@/components/designer/DesignerWorkspace";
 import { TrainingStudio } from "@/components/training/TrainingStudio";
 import { api, getApiBaseUrl } from "@/lib/api";
+import { useDesktopBackend } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { useDesignerStore } from "@/store/designer-store";
 
@@ -26,6 +27,23 @@ export function AppShell() {
   });
 
   const connected = health.isSuccess;
+  const { desktop, status, restart } = useDesktopBackend();
+  const phase = status?.state;
+  const blocked = phase === "failed" || phase === "unavailable";
+  const starting = !connected && !blocked && (phase === "starting" || health.isPending);
+
+  const backendPill = connected
+    ? `Backend ${health.data.torch_version}`
+    : blocked
+      ? "Backend stopped"
+      : starting
+        ? "Starting local backend"
+        : health.isError
+          ? "Backend unreachable"
+          : "Checking backend";
+  const backendTitle = status?.message
+    ? `${status.message}${status.log ? `\nLog: ${status.log}` : ""}`
+    : `${getApiBaseUrl()}${desktop ? "\nUse File → Restart local backend if it stays down." : ""}`;
 
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
@@ -65,13 +83,26 @@ export function AppShell() {
         </nav>
         <div className="ml-auto flex items-center gap-3 text-[12px]">
           <span className="hidden font-mono text-muted-foreground lg:inline">{getApiBaseUrl()}</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1">
-            <span className={cn("h-2 w-2 rounded-full", connected ? "bg-success" : "bg-destructive")} />
-            {connected
-              ? "Backend " + health.data.torch_version
-              : health.isError
-                ? "Backend unreachable"
-                : "Checking backend"}
+          <span
+            title={backendTitle}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1"
+          >
+            <span
+              className={cn(
+                "h-2 w-2 rounded-full",
+                connected ? "bg-success" : blocked ? "bg-destructive" : "animate-pulse bg-warning",
+              )}
+            />
+            {backendPill}
+            {desktop && blocked && (
+              <button
+                type="button"
+                onClick={restart}
+                className="ml-1 rounded border border-border px-1.5 py-0.5 text-[11px] font-medium text-foreground hover:bg-accent"
+              >
+                Restart
+              </button>
+            )}
           </span>
           <span className="inline-flex max-w-56 items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm">
             <Box className="h-4 w-4 shrink-0 text-accent-foreground" />

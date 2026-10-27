@@ -1,7 +1,36 @@
-﻿"""ThinkNet graph backend: configurable dimensions, graph validation, shape previews and PyTorch execution."""
+﻿"""ThinkNet graph backend: configurable dimensions, graph validation, shape previews and PyTorch execution.
+
+Starting the server
+-------------------
+Run it with the repository root as the working directory (the app is imported as
+``backend.thinknet_backend_core:app``, so starting from ``backend/`` fails with
+``ModuleNotFoundError: No module named 'backend'``)::
+
+    # Windows - use the project virtualenv (has torch + transformers)
+    backend\\.venv\\Scripts\\python.exe -m uvicorn backend.thinknet_backend_core:app --host 127.0.0.1 --port 8000
+
+    # macOS / Linux
+    backend/.venv/bin/python -m uvicorn backend.thinknet_backend_core:app --host 127.0.0.1 --port 8000
+
+    # same, with auto-reload while developing
+    python -m uvicorn backend.thinknet_backend_core:app --reload
+
+Interactive docs: http://127.0.0.1:8000/docs - health probe: /health.
+
+Environment
+-----------
+``THINKNET_EXTRA_ORIGINS``  comma-separated origins appended to the CORS allow-list
+                            (the Electron desktop shell sets this to its own
+                            ``http://127.0.0.1:<port>`` UI origin automatically).
+
+The Electron shell (``cd frontend && npm run electron:dev`` / the packaged app) starts
+and stops this server for you; see ``frontend/electron/config.cjs --explain`` for the
+interpreter and command it resolves.
+"""
 from __future__ import annotations
 
 import math
+import os
 from collections import defaultdict, deque
 from typing import Any
 from uuid import uuid4
@@ -1047,15 +1076,30 @@ class CompiledGraph(nn.Module):
 app = FastAPI(title="ThinkNet Architecture Backend", version="0.3.0")
 mount_job_endpoints()
 app.include_router(training_router)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+
+
+def allowed_origins() -> list[str]:
+    """Static dev/browser origins plus whatever the desktop shell announces.
+
+    The Electron build serves the UI from a loopback port of its own, so it
+    passes that origin through THINKNET_EXTRA_ORIGINS instead of growing this
+    list on every packaging change.
+    """
+    origins = [
         "http://localhost:1420",
         "http://127.0.0.1:1420",
         "tauri://localhost",
         "https://tauri.localhost",
         "http://tauri.localhost",
-    ],
+    ]
+    extra = os.environ.get("THINKNET_EXTRA_ORIGINS", "")
+    origins.extend(origin.strip() for origin in extra.split(",") if origin.strip())
+    return origins
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

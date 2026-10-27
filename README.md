@@ -179,6 +179,16 @@ A license has not yet been identified in this repository. Until one is added, pl
 
 ---
 
+tomorrow i will use you from my lab
+we will gonna integrate robotics, i have some arduino cars - we will make thinknet an international-level product tomorrow i promise you my friend, some of the features that are coming will be very excellent.
+promo
+we will gonna integrate an simulator, agents will be coming - LLM agents we will train at industry-level, high-scale training, solving real-world problems (plant disease detector, medical models, human-dog conversation possible), traditional ML will be there(regression, KNN, Decision, trees), Robotics Integration is coming - now train and design robots VLAs, Researchers Hub will be coming, integrating 10+ AI Libraries, ThinkNet Datasets, custom data pipeline
+Go beyond LLMs with multimodal AI, including image, video, vision, and reinforcement learning models.
+
+rather than only building features, we will firstly build some projects with this, i plan to speedrun and make 3 industry-grade projects with this, and see their will be no knowledge gap between a ai coder and ai Thinker
+after that day we will invite community - hundreds to thousands to use this
+Build an Ai community - where Thinker can discuss, share and colab
+
 <p align="center">
   <strong>ThinkNet — make AI engineering more visual, understandable, and experimentally rigorous.</strong>
   <br />

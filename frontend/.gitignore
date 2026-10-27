@@ -9,4 +9,8 @@ coverage
 npm-debug.log*
 src-tauri/target
 src-tauri/gen
+release
+desktop-build
+*.exe
+electron-install.log
 *.tsbuildinfo

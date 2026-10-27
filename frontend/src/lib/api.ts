@@ -1,4 +1,5 @@
 import { parseApiError } from "@/lib/utils";
+import { getDesktopApiBase, isDesktop } from "@/lib/desktop";
 import type {
   ArchitectureCatalogResponse,
   CompileResponse,
@@ -16,7 +17,14 @@ import type {
 export const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 
 export function getApiBaseUrl(): string {
-  return import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || DEFAULT_API_BASE_URL;
+  return getDesktopApiBase() || import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || DEFAULT_API_BASE_URL;
+}
+
+/** Same address, phrased for whoever can actually fix the problem. */
+export function backendHint(): string {
+  return isDesktop()
+    ? "Use File → Restart local backend, or open the backend log for the exact error."
+    : "Start it with: uvicorn backend.thinknet_backend_core:app --reload";
 }
 
 export class ApiError extends Error {
@@ -42,10 +50,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       },
     });
   } catch {
-    throw new ApiError(
-      `Cannot reach the ThinkNet backend at ${getApiBaseUrl()}. Start it with: uvicorn backend.thinknet_backend_core:app --reload`,
-      0,
-    );
+    throw new ApiError(`Cannot reach the ThinkNet backend at ${getApiBaseUrl()}. ${backendHint()}`, 0);
   }
 
   const contentType = response.headers.get("content-type") ?? "";

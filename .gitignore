@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Frontend
+node_modules/
+dist/
+dist-electron/
+
+# Local training outputs and checkpoints
+training_output/

@@ -1,0 +1,16 @@
+ThinkNet is an early-stage AI engineering workbench.
+
+This small placeholder corpus exists for local pipeline smoke tests only. It is not a
+quality pretraining dataset and must not be used to claim language-model capability.
+
+A language model learns patterns by predicting the next token from preceding tokens.
+Training quality depends on data quality, tokenization, model capacity, optimization,
+and evaluation. A tiny corpus can validate that the software pipeline runs, but it
+cannot establish general language understanding.
+
+ThinkNet aims to make model configurations inspectable and experiments reproducible.
+Every run should preserve the architecture configuration, tokenizer choice, dataset
+provenance, training settings, metrics, and checkpoint artifacts.
+
+Before scaling any experiment, verify dataset permissions, remove sensitive material,
+and evaluate on held-out data that was not used for training.

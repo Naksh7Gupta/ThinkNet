@@ -44,6 +44,7 @@ from pydantic import BaseModel, Field
 from backend.thinknet_architectures import architecture_catalog, build_architecture
 from backend.thinknet_quantization import QuantizerNode, quantization_report, SUPPORTED_DTYPES
 from backend.thinknet_codegen import generate_python_source
+from backend.thinknet_training import mount_job_endpoints, router as training_router
 
 
 # User-editable catalog metadata. Each entry can be surfaced in the GUI's "+" menu.
@@ -1073,6 +1074,8 @@ class CompiledGraph(nn.Module):
 
 
 app = FastAPI(title="ThinkNet Architecture Backend", version="0.3.0")
+mount_job_endpoints()
+app.include_router(training_router)
 
 
 def allowed_origins() -> list[str]:

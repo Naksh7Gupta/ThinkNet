@@ -141,3 +141,70 @@ export type ModelHandle = {
   report?: QuantizeResponse["report"];
   graphName: string;
 };
+
+
+export type TrainingSettings = {
+  learning_rate: number;
+  batch_size: number;
+  sequence_length: number;
+  max_steps: number;
+  log_every_steps: number;
+  save_every_steps: number;
+  weight_decay: number;
+  gradient_clip_norm: number;
+  seed: number;
+  tokenizer_name: string;
+  dataset_path: string;
+  output_dir: string;
+};
+
+export type TrainingJobStatus = "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed";
+
+export type TrainingJob = {
+  job_id: string;
+  status: TrainingJobStatus;
+  phase: string;
+  step: number;
+  total_steps: number;
+  progress: number;
+  loss: number | null;
+  message: string;
+  error: string | null;
+  device?: string;
+  parameter_count?: number;
+  token_count?: number;
+  vocabulary_size?: number;
+  graph_adjustments?: string[];
+  elapsed_seconds: number;
+  artifact_available: boolean;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  completed_at?: string;
+};
+
+export type TrainingJobStartResponse = {
+  started: boolean;
+  task: "causal_language_modeling";
+  job: TrainingJob;
+};
+
+export type TrainingJobsResponse = { jobs: TrainingJob[] };
+export type CancelTrainingJobResponse = { cancelled: boolean; job: TrainingJob };
+
+export type TrainingPreflight = {
+  ready: boolean;
+  errors: string[];
+  warnings: string[];
+  graph_adjustments: string[];
+  model_vocab_size: number | null;
+  vocabulary_size: number | null;
+  parameter_count: number | null;
+  token_count: number | null;
+  tokenizer_name: string;
+  dataset_path: string;
+  sequence_length?: number;
+  batch_size?: number;
+  max_steps?: number;
+  message: string;
+};

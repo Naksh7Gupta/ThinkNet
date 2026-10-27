@@ -1,6 +1,8 @@
 import json
+import sys
 import threading
 import time
+import types
 
 import pytest
 from fastapi.testclient import TestClient
@@ -220,3 +222,77 @@ def test_download_is_allowed_for_a_cancelled_run(fake_tokenizer, job_root):
     assert archive.is_file()
     manifest = json.loads((job_root / job_id / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["steps_completed"] == job["step"]
+
+
+def stub_transformers(monkeypatch, module):
+    """Isolates _load_tokenizer so tests never touch the real, 30s transformers import."""
+    monkeypatch.setitem(sys.modules, "transformers", module)
+    monkeypatch.setattr(training_jobs, "_TOKENIZERS", {})
+
+
+def test_tokenizer_load_retries_a_half_imported_transformers(monkeypatch):
+    """Racing the first import used to fail the whole run with an ImportError."""
+    asked = {"count": 0}
+
+    class LateAutoTokenizer:
+        @classmethod
+        def from_pretrained(cls, name):
+            return FakeTokenizer()
+
+    module = types.ModuleType("transformers")
+    module.__file__ = "transformers/__init__.py"
+
+    def lazy(name):
+        if name != "AutoTokenizer":
+            raise AttributeError(name)
+        asked["count"] += 1
+        if asked["count"] == 1:
+            # Exactly what CPython raises while transformers/__init__.py is still executing.
+            raise ImportError("cannot import name 'AutoTokenizer' from 'transformers'")
+        return LateAutoTokenizer
+
+    module.__getattr__ = lazy
+    stub_transformers(monkeypatch, module)
+
+    tokenizer = training_jobs._load_tokenizer("gpt2")
+
+    assert isinstance(tokenizer, FakeTokenizer)
+    assert asked["count"] == 2
+
+
+def test_concurrent_tokenizer_loads_import_only_once(monkeypatch):
+    """Preflight and a job started together must not both enter the lazy import."""
+    live = {"count": 0, "peak": 0}
+    loaded = threading.Event()
+    release = threading.Event()
+
+    class SlowAutoTokenizer:
+        @classmethod
+        def from_pretrained(cls, name):
+            live["count"] += 1
+            live["peak"] = max(live["peak"], live["count"])
+            loaded.set()
+            release.wait(30)
+            live["count"] -= 1
+            return FakeTokenizer()
+
+    module = types.ModuleType("transformers")
+    module.AutoTokenizer = SlowAutoTokenizer
+    stub_transformers(monkeypatch, module)
+
+    results = {}
+
+    def load(worker_id):
+        results[worker_id] = training_jobs._load_tokenizer("gpt2")
+
+    workers = [threading.Thread(target=load, args=(index,)) for index in range(3)]
+    for worker in workers:
+        worker.start()
+    assert loaded.wait(10)
+    time.sleep(0.2)
+    release.set()
+    for worker in workers:
+        worker.join(timeout=60)
+
+    assert len(results) == 3
+    assert live["peak"] == 1

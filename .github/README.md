@@ -1,7 +1,6 @@
 # ThinkNet
 
-<img src='assets/image.png'>
-</img>
+<img src="../assets/image.png" alt="ThinkNet banner" />
 
 <p align="center">
   <img src="https://img.shields.io/badge/ThinkNet-AI%20Engineering-6C63FF?style=for-the-badge&labelColor=111827" alt="ThinkNet AI Engineering" />
@@ -212,7 +211,7 @@ and [backend documentation](./docs/README.md) for component-specific details.
 
 ## 📜 License
 
-A license has not yet been identified in this repository. Until one is added, please do not assume that the code is available for unrestricted reuse. A license should be selected and committed explicitly by the project maintainer.
+ThinkNet is licensed under the [Apache License 2.0](../LICENSE).
 
 ---
 

@@ -4,8 +4,7 @@ This is the first backend milestone for ThinkNet's visual AI architecture editor
 
 ## User-editable dimensions
 
-An Input node's `config.shape` describes **one sample and excludes the batch axis**. Examples:
-
+An Input node's `config.shape` describes **one sample and excludes the batch axis**. Example
 - `{"shape":[128]}` accepts tensors shaped `[batch, 128]`.
 - `{"shape":[196,768]}` describes token embeddings shaped `[batch,196,768]`.
 - `{"shape":[-1,768]}` permits a variable sequence length and fixed feature width. At most one `-1` is allowed.

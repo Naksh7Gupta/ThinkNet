@@ -1,6 +1,0 @@
-{
-  "identifier": "default",
-  "description": "Default ThinkNet window capabilities",
-  "windows": ["main"],
-  "permissions": ["core:default"]
-}

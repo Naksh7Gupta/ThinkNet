@@ -1,0 +1,21 @@
+{
+  "name": "thinknet-monorepo",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/desktop",
+    "electron:dev": "npm run electron:dev --workspace apps/desktop",
+    "electron:build": "npm run electron:build --workspace apps/desktop",
+    "icon": "node scripts/make-icon.mjs",
+    "build": "npm run build --workspace apps/desktop",
+    "lint": "npm run lint --workspace apps/desktop",
+    "typecheck": "npm run typecheck --workspace apps/desktop",
+    "test:frontend": "npm run test --workspace apps/desktop",
+    "test:backend": "python -m pytest tests/backend -q",
+    "test": "npm run test:frontend && npm run test:backend"
+  }
+}

@@ -1,5 +1,8 @@
 # ThinkNet
 
+<img src='assets/image.png'>
+</img>
+
 <p align="center">
   <img src="https://img.shields.io/badge/ThinkNet-AI%20Engineering-6C63FF?style=for-the-badge&labelColor=111827" alt="ThinkNet AI Engineering" />
   <img src="https://img.shields.io/badge/Status-Early%20Development-F59E0B?style=for-the-badge&labelColor=111827" alt="Early development" />
@@ -81,9 +84,9 @@ ThinkNet's current architectural direction is a lightweight desktop application 
 
 | Layer | Direction | Responsibility |
 | --- | --- | --- |
-| Desktop shell | **Tauri v2** | Native desktop packaging and controlled access to system capabilities |
+| Desktop shell | **Electron** | Cross-platform desktop packaging and application lifecycle |
 | User interface | **HTML, CSS, JavaScript** | Responsive screens, visual workflows, and interaction |
-| Native layer | **Rust** | Native functionality and carefully permissioned inter-process communication |
+| Desktop runtime | **Node.js** | Window management and local process orchestration |
 | AI workloads | **Python and/or C++ processes** | Model configuration, data processing, training, and inference |
 | AI ecosystem | **PyTorch and task-specific libraries** | Model development and specialized AI workflows |
 | Integrations | **Provider- and feature-dependent** | Compute, datasets, research tooling, and robotics integrations |
@@ -94,7 +97,7 @@ This is the intended direction, not a statement that every layer or integration 
 
 - **Responsive by design:** keep heavy computation out of the UI process.
 - **Resource-aware:** measure memory use and performance on practical hardware, including systems with 16 GB RAM.
-- **Secure by default:** validate inputs, limit native permissions, and treat external data and generated code as untrusted until checked.
+- **Secure by default:** validate inputs, limit desktop capabilities, and treat external data and generated code as untrusted until checked.
 - **Observable:** provide useful errors, logs, progress, and experiment details.
 - **Reproducible:** record relevant configurations and make it easier to repeat experiments.
 - **Maintainable:** favor clear module boundaries, explicit interfaces, and focused changes over unnecessary rewrites.
@@ -104,7 +107,7 @@ This is the intended direction, not a statement that every layer or integration 
 
 The roadmap is directional and will evolve as implementation, testing, and feedback reveal what is most valuable.
 
-- [ ] Establish the desktop application foundation with Tauri v2.
+- [ ] Consolidate the Electron desktop application foundation.
 - [ ] Define module boundaries and communication between the UI and compute processes.
 - [ ] Build the initial application shell and navigation.
 - [ ] Prototype the visual model-configuration workflow.
@@ -141,26 +144,34 @@ AI tools can generate plausible-looking code and confident explanations that are
 
 ## 🚀 Getting started
 
-**The repository is at an early stage, and a complete runnable application setup has not yet been documented.** Installation and execution instructions will be added when the initial application structure and supported environment are ready.
+Install the JavaScript workspace dependencies from the repository root:
 
-For now, you can:
-1. Explore the repository and its open development direction.
-2. Review the roadmap and suggest a focused first milestone.
-3. Open an issue to discuss a feature, technical question, or potential contribution.
+```bash
+npm install
+```
 
-Please don't treat the planned feature list as a downloadable feature set or assume cloud compute is automatically available.
+Install the backend dependencies and start the API from the repository root:
+
+```bash
+python -m venv services/backend/.venv
+# Windows PowerShell: .\services\backend\.venv\Scripts\Activate.ps1
+# macOS/Linux: source services/backend/.venv/bin/activate
+python -m pip install -r services/backend/requirements.txt
+python -m uvicorn services.backend.thinknet_backend_core:app --reload
+```
+
+In another terminal, run the web UI with `npm run dev` or the Electron desktop
+application with `npm run electron:dev`. `npm run test` runs both frontend and
+backend tests; activate the backend virtualenv before running it.
+
+The project is in early development. Planned capabilities are not claims of a
+downloadable feature set, and cloud compute is not automatically available.
 
 ## 🤝 Contributing
 
 Ideas, constructive feedback, documentation improvements, and carefully scoped contributions can help shape ThinkNet.
 
-Before proposing a large change:
-1. Open an issue or discussion describing the problem and intended outcome.
-2. Explain the proposed approach and any alternatives considered.
-3. Keep pull requests focused and include tests or verification steps where practical.
-4. Document limitations, assumptions, and any new configuration requirements.
-
-Please avoid presenting unimplemented capabilities as completed or introducing dependencies without a clear reason.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow and quality bar.
 
 ## 🧪 Quality bar
 
@@ -172,6 +183,32 @@ For a feature to be considered ready, we want to answer:
 - Has the behavior been tested on a supported environment?
 - Are resource usage and security implications understood?
 - Can another contributor maintain and extend it?
+
+## 🏗️ Repository structure
+
+ThinkNet is organized as a monorepo:
+
+```text
+apps/desktop/       Electron + React desktop application
+src/                Desktop renderer source
+services/backend/   FastAPI and Python AI/training services
+packages/           Reusable modules shared by applications and services
+infrastructure/     Cross-cutting runtime infrastructure
+tests/              Backend and frontend unit/integration tests
+e2e/                End-to-end workflow tests
+scripts/            Development probes and automation
+docs/               Technical documentation
+assets/             Shared images, icons, and static resources
+configs/            Configuration shared across workspaces
+.github/            Repository automation
+```
+
+The `packages/`, `infrastructure/`, `e2e/`, `assets/`, `configs/`, and `.github/`
+folders document extension points; the current implementation keeps desktop-specific
+configuration and assets with `apps/desktop` and has no shared packages or E2E suite yet.
+
+Root npm scripts unify workspace development and checks. See [the desktop guide](./apps/desktop/README.md)
+and [backend documentation](./docs/README.md) for component-specific details.
 
 ## 📜 License
 

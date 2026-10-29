@@ -214,6 +214,28 @@ if (!app.requestSingleInstanceLock()) {
     return supervisor.ensure();
   });
   ipcMain.handle("thinknet:open-log", () => (logPath ? shell.openPath(logPath) : "No log file yet."));
+  ipcMain.handle("thinknet:select-model-input", async () => {
+    if (!window || window.isDestroyed()) return null;
+    const result = await dialog.showOpenDialog(window, {
+      title: "Select a local model directory or checkpoint",
+      buttonLabel: "Select model",
+      properties: ["openDirectory", "openFile"],
+      filters: [{
+        name: "Supported model checkpoints",
+        extensions: ["safetensors", "pt", "pth", "bin", "ckpt"],
+      }],
+    });
+    return result.canceled ? null : result.filePaths[0] || null;
+  });
+  ipcMain.handle("thinknet:select-output-directory", async () => {
+    if (!window || window.isDestroyed()) return null;
+    const result = await dialog.showOpenDialog(window, {
+      title: "Select an output directory",
+      buttonLabel: "Select output location",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    return result.canceled ? null : result.filePaths[0] || null;
+  });
 
   app.on("before-quit", (event) => {
     // Only stop what we started: a backend the user launched themselves stays theirs.

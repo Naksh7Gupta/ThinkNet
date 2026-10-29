@@ -6,6 +6,7 @@ import {
   isDualInputType,
   isMergeType,
   MODEL_TRANSFORM_TYPES,
+  MODEL_WORKFLOW_TYPES,
   sizeNodes,
   styleEdges,
   toGraphDef,
@@ -13,7 +14,7 @@ import {
   type ThinkNetEdge,
   type ThinkNetNode,
 } from "@/lib/graph";
-import type { CatalogNode, GraphDef, ModelHandle, ShapePreviewResponse, ValidationResponse } from "@/types/api";
+import type { CatalogNode, GraphDef, LocalModelAsset, ModelHandle, ShapePreviewResponse, ValidationResponse } from "@/types/api";
 
 type DesignerState = {
   graphName: string;
@@ -26,6 +27,7 @@ type DesignerState = {
   lastNote: string | null;
   lastError: string | null;
   models: ModelHandle[];
+  localAssets: LocalModelAsset[];
   inspectedModel: ModelHandle["model_id"] | null;
   canvasRevision: number;
   setGraphName: (name: string) => void;
@@ -51,6 +53,7 @@ type DesignerState = {
   addModel: (model: ModelHandle) => void;
   removeModel: (modelId: string) => void;
   setInspectedModel: (modelId: string | null) => void;
+  addLocalAsset: (asset: LocalModelAsset) => void;
   clearLibraryNotice: () => void;
 };
 
@@ -73,6 +76,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   lastNote: null,
   lastError: null,
   models: [],
+  localAssets: [],
   inspectedModel: null,
   diagramView: false,
   canvasRevision: 0,
@@ -88,8 +92,24 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   onConnect: (connection) => {
     if (!connection.source || !connection.target) return;
     if (connection.source === connection.target) return;
+    const source = get().nodes.find((node) => node.id === connection.source);
     const target = get().nodes.find((node) => node.id === connection.target);
+    const sourceType = source?.data.typeName ?? "";
     const typeName = target?.data.typeName ?? "";
+    if (
+      MODEL_WORKFLOW_TYPES.has(sourceType) ||
+      MODEL_WORKFLOW_TYPES.has(typeName)
+    ) {
+      if (sourceType !== "ModelLoader" || typeName !== "Quantizer") return;
+      if (get().edges.some((edge) => edge.target === connection.target)) return;
+      if (
+        get().edges.some(
+          (edge) =>
+            edge.source === connection.source &&
+            edge.target === connection.target,
+        )
+      ) return;
+    }
     const incoming = get().edges.filter((edge) => edge.target === connection.target);
     if (isMergeType(typeName) && incoming.length >= 2) return;
     // CrossAttention consumes exactly one query and one context tensor; a third edge
@@ -127,16 +147,25 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     set({ edges: [...get().edges, edge] });
   },
   addCatalogNode: (catalog, position) => {
-    if (MODEL_TRANSFORM_TYPES.has(catalog.type) || catalog.execution_domain === "model-transform") {
+    if (
+      (MODEL_TRANSFORM_TYPES.has(catalog.type) ||
+        catalog.execution_domain === "model-transform") &&
+      !MODEL_WORKFLOW_TYPES.has(catalog.type)
+    ) {
       set({
         libraryNotice:
-          `${catalog.type} is a model-transform operation, not a tensor-graph node. Compile a graph first, then use Model operations.`,
+          `${catalog.type} is not available as a canvas node.`,
       });
       return;
     }
     const node = createNodeFromCatalog(
       catalog,
-      position ?? { x: 120 + get().nodes.length * 24, y: 80 + get().nodes.length * 18 },
+      position ??
+        (catalog.type === "Quantizer"
+          ? { x: 540, y: 160 }
+          : catalog.type === "ModelLoader"
+            ? { x: 140, y: 160 }
+            : { x: 120 + get().nodes.length * 24, y: 80 + get().nodes.length * 18 }),
       nextId(catalog.type, get().nodes),
       get().diagramView,
     );
@@ -189,5 +218,12 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
       inspectedModel: get().inspectedModel === modelId ? null : get().inspectedModel,
     }),
   setInspectedModel: (inspectedModel) => set({ inspectedModel }),
+  addLocalAsset: (asset) =>
+    set({
+      localAssets: [
+        asset,
+        ...get().localAssets.filter((existing) => existing.path !== asset.path),
+      ],
+    }),
   clearLibraryNotice: () => set({ libraryNotice: null }),
 }));

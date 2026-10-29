@@ -19,8 +19,10 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["../../src/*"]
+      "@/*": ["../../src/*"],
+      "@thinknet/compute-estimator": ["../../packages/compute-estimator/src/index.ts"],
+      "@thinknet/compute-estimator/*": ["../../packages/compute-estimator/src/*"]
     }
   },
-  "include": ["../../src"]
+  "include": ["../../src", "../../packages/compute-estimator/src"]
 }

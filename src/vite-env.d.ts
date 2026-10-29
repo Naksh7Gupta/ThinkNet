@@ -29,6 +29,8 @@ interface ThinkNetDesktop {
   getStatus: () => Promise<ThinkNetDesktopStatus>;
   restartBackend: () => Promise<ThinkNetDesktopStatus>;
   openLogFile: () => Promise<string>;
+  selectModelInput: () => Promise<string | null>;
+  selectOutputDirectory: () => Promise<string | null>;
   minimizeWindow: () => Promise<boolean>;
   toggleWindowMaximize: () => Promise<boolean>;
   closeWindow: () => Promise<boolean>;

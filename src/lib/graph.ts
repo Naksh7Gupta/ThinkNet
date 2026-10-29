@@ -4,7 +4,27 @@ import { defaultConfigForType } from "@/lib/node-config";
 
 export const TENSOR_NODE_TYPE = "thinknet";
 export const FRAME_NODE_TYPE = "thinknet-frame";
+export const MODEL_LOADER_NODE_TYPE = "thinknet-model-loader";
+export const QUANTIZER_NODE_TYPE = "thinknet-quantizer";
 export const MODEL_TRANSFORM_TYPES = new Set(["Quantizer"]);
+export const MODEL_WORKFLOW_TYPES = new Set(["ModelLoader", "Quantizer"]);
+export const MODEL_WORKFLOW_NODE_TYPES = new Set([
+  MODEL_LOADER_NODE_TYPE,
+  QUANTIZER_NODE_TYPE,
+]);
+
+export const MODEL_LOADER_CATALOG: CatalogNode = {
+  type: "ModelLoader",
+  category: "Model workflow",
+  status: "implemented-and-tested",
+  size: "large",
+  width: 280,
+  height: 270,
+  color: "#38BDF8",
+  input_kind: "none",
+  output_kind: "model",
+  execution_domain: "model-transform",
+};
 
 export type ThinkNetNodeData = {
   typeName: string;
@@ -22,7 +42,10 @@ export type ThinkNetNodeData = {
 
 export type ThinkNetNode = Node<
   ThinkNetNodeData,
-  typeof TENSOR_NODE_TYPE | typeof FRAME_NODE_TYPE
+  | typeof TENSOR_NODE_TYPE
+  | typeof FRAME_NODE_TYPE
+  | typeof MODEL_LOADER_NODE_TYPE
+  | typeof QUANTIZER_NODE_TYPE
 >;
 export type ThinkNetEdge = Edge;
 
@@ -77,7 +100,7 @@ export function toGraphDef(
   return {
     name: name.trim() || "untitled_architecture",
     nodes: nodes
-      .filter((node) => node.type !== FRAME_NODE_TYPE)
+      .filter((node) => !MODEL_WORKFLOW_NODE_TYPES.has(node.type ?? "") && node.type !== FRAME_NODE_TYPE)
       .map((node) => ({
         id: node.id,
         type: node.data.typeName,
@@ -86,7 +109,16 @@ export function toGraphDef(
     edges: edges
       // A collapsed ×N block gets a view-only bridge back to the stack tail so the
       // single drawn copy stays connected; the real per-block wiring is still exported.
-      .filter((edge) => edge.data?.["synthetic"] !== true)
+      .filter(
+        (edge) =>
+          edge.data?.["synthetic"] !== true &&
+          !MODEL_WORKFLOW_NODE_TYPES.has(
+            nodes.find((node) => node.id === edge.source)?.type ?? "",
+          ) &&
+          !MODEL_WORKFLOW_NODE_TYPES.has(
+            nodes.find((node) => node.id === edge.target)?.type ?? "",
+          ),
+      )
       .map((edge) => ({
         source: edge.source,
         target: edge.target,
@@ -102,14 +134,28 @@ export function createNodeFromCatalog(
   id: string,
   diagram = false,
 ): ThinkNetNode {
+  const workflowType =
+    catalog.type === "ModelLoader"
+      ? MODEL_LOADER_NODE_TYPE
+      : catalog.type === "Quantizer"
+        ? QUANTIZER_NODE_TYPE
+        : null;
   return {
     id,
-    type: TENSOR_NODE_TYPE,
+    type: workflowType ?? TENSOR_NODE_TYPE,
     position,
-    style: nodeSizeFor(catalog.type, catalog, diagram),
+    style: workflowType
+      ? {
+          width: catalog.type === "Quantizer" ? 320 : catalog.width,
+          minHeight: catalog.type === "Quantizer" ? 360 : catalog.height,
+        }
+      : nodeSizeFor(catalog.type, catalog, diagram),
     data: {
       typeName: catalog.type,
-      config: defaultConfigForType(catalog.type, catalog),
+      config:
+        catalog.type === "Quantizer"
+          ? { dtype: "float16" }
+          : defaultConfigForType(catalog.type, catalog),
       catalog,
     },
   };
@@ -851,9 +897,15 @@ export function graphDefToFlow(
     const { width, height } = diagramSize(node.type);
     const column = index % 3;
     const row = Math.floor(index / 3);
+    const workflowType =
+      node.type === "ModelLoader"
+        ? MODEL_LOADER_NODE_TYPE
+        : node.type === "Quantizer"
+          ? QUANTIZER_NODE_TYPE
+          : null;
     return {
       id: node.id,
-      type: TENSOR_NODE_TYPE,
+      type: workflowType ?? TENSOR_NODE_TYPE,
       position:
         options?.positions?.[node.id] ??
         (vertical
@@ -862,7 +914,12 @@ export function graphDefToFlow(
               y: STACK_TOP + index * (height + VERTICAL_GAP),
             }
           : { x: 80 + column * 260, y: 80 + row * 140 }),
-      style: nodeSizeFor(node.type, catalog, compact),
+      style: workflowType
+        ? {
+            width: node.type === "Quantizer" ? 320 : catalog?.width ?? 320,
+            minHeight: node.type === "Quantizer" ? 360 : catalog?.height ?? 270,
+          }
+        : nodeSizeFor(node.type, catalog, compact),
       ...(folded.has(node.id) ? { hidden: true } : {}),
       data: {
         typeName: node.type,

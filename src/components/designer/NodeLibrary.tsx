@@ -3,7 +3,7 @@ import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MODEL_TRANSFORM_TYPES } from "@/lib/graph";
+import { MODEL_TRANSFORM_TYPES, MODEL_WORKFLOW_TYPES } from "@/lib/graph";
 import { cn } from "@/lib/utils";
 import { useDesignerStore } from "@/store/designer-store";
 import type { CatalogNode } from "@/types/api";
@@ -61,7 +61,7 @@ export function NodeLibrary({
           />
         </div>
         <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
-          Shift+A focuses search. Quantizer is a model operation, not a graph node.
+          Shift+A focuses search. Connect Model Loader → Quantizer; completed models appear in Assets.
         </p>
         {notice && <p className="mt-2 text-[11px] leading-4 text-warning">{notice}</p>}
       </div>
@@ -76,13 +76,14 @@ export function NodeLibrary({
               <div className="space-y-1">
                 {items.map((item) => {
                   const transform = MODEL_TRANSFORM_TYPES.has(item.type);
+                  const workflowNode = MODEL_WORKFLOW_TYPES.has(item.type);
                   return (
                     <button
                       key={item.type}
                       type="button"
-                      draggable={!transform}
+                      draggable={!transform || workflowNode}
                       onDragStart={(event) => {
-                        if (transform) {
+                        if (transform && !workflowNode) {
                           event.preventDefault();
                           return;
                         }
@@ -104,7 +105,7 @@ export function NodeLibrary({
                           <Badge variant={statusVariant(item.status)}>
                             {item.status.replaceAll("-", " ")}
                           </Badge>
-                          {transform && <Badge>model transform</Badge>}
+                          {workflowNode && <Badge>model workflow</Badge>}
                         </span>
                       </span>
                     </button>

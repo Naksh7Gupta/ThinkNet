@@ -1,5 +1,5 @@
 import { useReactFlow } from "@xyflow/react";
-import { CirclePlus, PanelRight, ScanLine, Trash2 } from "lucide-react";
+import { CirclePlus, FolderOpen, PanelRight, ScanLine, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDesignerStore } from "@/store/designer-store";
 
@@ -36,11 +36,15 @@ function RailButton({
 export function ToolRail({
   libraryOpen,
   onToggleLibrary,
+  assetsOpen,
+  onToggleAssets,
   panelOpen,
   onTogglePanel,
 }: {
   libraryOpen: boolean;
   onToggleLibrary: () => void;
+  assetsOpen: boolean;
+  onToggleAssets: () => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
 }) {
@@ -54,6 +58,9 @@ export function ToolRail({
     >
       <RailButton label="Add node (Shift+A)" active={libraryOpen} onClick={onToggleLibrary}>
         <CirclePlus className="h-5 w-5" />
+      </RailButton>
+      <RailButton label="Assets" active={assetsOpen} onClick={onToggleAssets}>
+        <FolderOpen className="h-5 w-5" />
       </RailButton>
       <RailButton label="Fit graph to view" onClick={() => void fitView({ padding: 0.24, duration: 180 })}>
         <ScanLine className="h-5 w-5" />

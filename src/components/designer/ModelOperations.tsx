@@ -3,32 +3,20 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { ApiError, api } from "@/lib/api";
 import { formatCount } from "@/lib/utils";
 import { useDesignerStore } from "@/store/designer-store";
-import type { CatalogNode, ExportResponse, ModelMetadata } from "@/types/api";
+import type { ExportResponse, ModelMetadata } from "@/types/api";
 
-export function ModelOperations({ catalog }: { catalog: CatalogNode[] }) {
+export function ModelOperations() {
   const models = useDesignerStore((s) => s.models);
   const inspectedModel = useDesignerStore((s) => s.inspectedModel);
   const setInspectedModel = useDesignerStore((s) => s.setInspectedModel);
-  const addModel = useDesignerStore((s) => s.addModel);
-  const removeModel = useDesignerStore((s) => s.removeModel);
   const getGraph = useDesignerStore((s) => s.getGraph);
   const setLastError = useDesignerStore((s) => s.setLastError);
   const setLastNote = useDesignerStore((s) => s.setLastNote);
   const [metadata, setMetadata] = useState<ModelMetadata | null>(null);
   const [exportResult, setExportResult] = useState<ExportResponse | null>(null);
-
-  const quantizer = catalog.find((item) => item.type === "Quantizer");
-  const dtypes =
-    quantizer?.config_fields?.find((field) => field.name === "dtype")?.options ?? [
-      { label: "INT8 (dynamic Linear quantization)", value: "int8" },
-      { label: "Float16", value: "float16" },
-      { label: "BFloat16", value: "bfloat16" },
-    ];
-  const [dtype, setDtype] = useState(String(quantizer?.config_fields?.[0]?.default ?? "int8"));
 
   function handleError(error: unknown) {
     setLastError(error instanceof ApiError ? error.message : "Request failed.");
@@ -40,40 +28,6 @@ export function ModelOperations({ catalog }: { catalog: CatalogNode[] }) {
       setLastError(null);
       setMetadata(data);
       setInspectedModel(data.model_id);
-    },
-    onError: handleError,
-  });
-
-  const quantize = useMutation({
-    mutationFn: () => {
-      if (!inspectedModel) throw new ApiError("Compile a model first, then select it to quantize.", 0);
-      return api.quantizeModel(inspectedModel, dtype);
-    },
-    onSuccess: (data) => {
-      setLastError(null);
-      setLastNote(data.note);
-      addModel({
-        model_id: data.model_id,
-        parameter_count: data.parameter_count,
-        note: data.note,
-        origin: "quantize",
-        dtype: data.dtype,
-        source_model_id: data.source_model_id,
-        report: data.report,
-        graphName: models.find((model) => model.model_id === data.source_model_id)?.graphName ?? getGraph().name,
-      });
-      setMetadata(null);
-    },
-    onError: handleError,
-  });
-
-  const remove = useMutation({
-    mutationFn: (modelId: string) => api.deleteModel(modelId),
-    onSuccess: (data) => {
-      setLastError(null);
-      removeModel(data.model_id);
-      if (metadata?.model_id === data.model_id) setMetadata(null);
-      setLastNote(`Released in-memory handle ${data.model_id}.`);
     },
     onError: handleError,
   });
@@ -94,11 +48,10 @@ export function ModelOperations({ catalog }: { catalog: CatalogNode[] }) {
     <div className="border-t border-border">
       <div className="px-4 py-3">
         <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Model operations
+          Compiled models
         </div>
         <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-          Compile creates an in-memory handle. Quantizer is a model transform, not a tensor-graph
-          node. INT8 applies only to Linear modules.
+          Compile creates an in-memory handle. Quantized local checkpoints are available in Assets.
         </p>
       </div>
       <ScrollArea className="h-40">
@@ -127,43 +80,10 @@ export function ModelOperations({ catalog }: { catalog: CatalogNode[] }) {
           ))}
         </div>
       </ScrollArea>
-      <Separator />
       <div className="space-y-2 px-4 py-3">
-        <label className="block text-xs text-muted-foreground">
-          Quantization dtype
-          <select
-            className="mt-1 h-8 w-full rounded-md border border-border bg-card px-2 text-sm"
-            value={dtype}
-            onChange={(event) => setDtype(event.target.value)}
-          >
-            {dtypes.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="flex flex-wrap gap-1.5">
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={!inspectedModel || quantize.isPending}
-            onClick={() => quantize.mutate()}
-          >
-            Quantize
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={!inspectedModel || remove.isPending}
-            onClick={() => inspectedModel && remove.mutate(inspectedModel)}
-          >
-            Release
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => exportSource.mutate()} disabled={exportSource.isPending}>
-            Preview export
-          </Button>
-        </div>
+        <Button size="sm" variant="secondary" onClick={() => exportSource.mutate()} disabled={exportSource.isPending}>
+          Preview export
+        </Button>
         {selected?.report && (
           <p className="text-[11px] leading-4 text-muted-foreground">
             {selected.dtype === "int8"

@@ -10,14 +10,24 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo } from "react";
 import { ArchitectureNode } from "@/components/designer/ArchitectureNode";
+import { ModelLoaderNode, QuantizerNode } from "@/components/designer/ModelWorkflowNodes";
 import { BlockFrameNode } from "@/components/designer/BlockFrameNode";
-import { FRAME_NODE_TYPE, TENSOR_NODE_TYPE, type ThinkNetNode } from "@/lib/graph";
+import {
+  FRAME_NODE_TYPE,
+  MODEL_LOADER_NODE_TYPE,
+  QUANTIZER_NODE_TYPE,
+  TENSOR_NODE_TYPE,
+  MODEL_WORKFLOW_TYPES,
+  type ThinkNetNode,
+} from "@/lib/graph";
 import { useDesignerStore } from "@/store/designer-store";
 import type { CatalogNode } from "@/types/api";
 
 const nodeTypes = {
   [TENSOR_NODE_TYPE]: ArchitectureNode,
   [FRAME_NODE_TYPE]: BlockFrameNode,
+  [MODEL_LOADER_NODE_TYPE]: ModelLoaderNode,
+  [QUANTIZER_NODE_TYPE]: QuantizerNode,
 };
 
 export function DesignerCanvas({ catalog }: { catalog: CatalogNode[] }) {
@@ -47,7 +57,16 @@ export function DesignerCanvas({ catalog }: { catalog: CatalogNode[] }) {
   const isValidConnection = useCallback<IsValidConnection>(
     (connection: Connection | { source: string | null; target: string | null }) => {
       if (!connection.source || !connection.target) return false;
-      return connection.source !== connection.target;
+      if (connection.source === connection.target) return false;
+      const state = useDesignerStore.getState();
+      const source = state.nodes.find((node) => node.id === connection.source);
+      const target = state.nodes.find((node) => node.id === connection.target);
+      const sourceType = source?.data.typeName ?? "";
+      const targetType = target?.data.typeName ?? "";
+      if (MODEL_WORKFLOW_TYPES.has(sourceType) || MODEL_WORKFLOW_TYPES.has(targetType)) {
+        return sourceType === "ModelLoader" && targetType === "Quantizer";
+      }
+      return true;
     },
     [],
   );

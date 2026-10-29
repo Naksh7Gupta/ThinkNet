@@ -44,6 +44,7 @@ from services.backend.thinknet_architectures import architecture_catalog, build_
 from services.backend.thinknet_quantization import QuantizerNode, quantization_report, SUPPORTED_DTYPES
 from services.backend.thinknet_codegen import generate_python_source
 from services.backend.thinknet_training import mount_job_endpoints, router as training_router
+from services.backend.thinknet_local_quantization import router as local_quantization_router
 
 
 # User-editable catalog metadata. Each entry can be surfaced in the GUI's "+" menu.
@@ -1075,6 +1076,7 @@ class CompiledGraph(nn.Module):
 app = FastAPI(title="ThinkNet Architecture Backend", version="0.3.0")
 mount_job_endpoints()
 app.include_router(training_router)
+app.include_router(local_quantization_router)
 
 
 def allowed_origins() -> list[str]:

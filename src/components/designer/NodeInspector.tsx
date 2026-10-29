@@ -163,12 +163,16 @@ export function NodeInspector({ architectures }: { architectures: ArchitectureIn
     );
   }
 
-  const fields = fieldsForNode(
-    selected.data.typeName,
-    selected.data.config,
-    selected.data.catalog,
-    architectures.map((item) => item.name),
-  );
+  const modelWorkflowNode =
+    selected.data.typeName === "ModelLoader" || selected.data.typeName === "Quantizer";
+  const fields = modelWorkflowNode
+    ? []
+    : fieldsForNode(
+        selected.data.typeName,
+        selected.data.config,
+        selected.data.catalog,
+        architectures.map((item) => item.name),
+      );
   const basic = fields.filter((field) => !field.label.includes("(alias)"));
   const advanced = fields.filter((field) => field.label.includes("(alias)"));
   const issues = localConfigIssues(selected.data.typeName, selected.data.config);
@@ -213,7 +217,9 @@ export function NodeInspector({ architectures }: { architectures: ArchitectureIn
 
       {fields.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          This node has no additional configuration fields in the current backend.
+          {modelWorkflowNode
+            ? "Configure this workflow directly on the canvas node."
+            : "This node has no additional configuration fields in the current backend."}
         </p>
       ) : (
         <div className="space-y-2">

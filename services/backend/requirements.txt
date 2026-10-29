@@ -3,3 +3,5 @@ pydantic>=2.5
 fastapi>=0.110
 uvicorn[standard]>=0.27
 transformers>=4.40
+safetensors>=0.4.3
+accelerate>=0.26

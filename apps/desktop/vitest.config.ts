@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "../../src"),
+      "@thinknet/compute-estimator": path.resolve(__dirname, "../../packages/compute-estimator/src"),
     },
   },
 });

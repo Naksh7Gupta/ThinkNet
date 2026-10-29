@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld("thinknet", {
   getStatus: () => ipcRenderer.invoke("thinknet:get-status"),
   restartBackend: () => ipcRenderer.invoke("thinknet:restart-backend"),
   openLogFile: () => ipcRenderer.invoke("thinknet:open-log"),
+  selectModelInput: () => ipcRenderer.invoke("thinknet:select-model-input"),
+  selectOutputDirectory: () => ipcRenderer.invoke("thinknet:select-output-directory"),
   minimizeWindow: () => ipcRenderer.invoke("thinknet:minimize-window"),
   toggleWindowMaximize: () => ipcRenderer.invoke("thinknet:toggle-maximize-window"),
   closeWindow: () => ipcRenderer.invoke("thinknet:close-window"),

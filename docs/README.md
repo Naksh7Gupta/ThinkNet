@@ -81,20 +81,9 @@ This is graph-level execution integration; it does not yet provide a persistent 
 
 ## Model quantization node
 
-The `Quantizer` is a **model-transform** node: its input is a compiled model, its configuration requests an output dtype, and its output is a new model handle. It is intentionally not a tensor activation node, so add it to the model-operations stage rather than as an edge in the tensor graph.
+The model designer's `ModelLoader` and `Quantizer` are model-workflow canvas nodes, not tensor activation nodes. Connect a local `ModelLoader` node to `Quantizer`, choose the local output folder and FP16/BF16 target on the Quantizer, then run conversion. Validated output is added to the **Assets** panel in the designer's left rail. Workflow nodes are excluded from tensor graph compile/export payloads.
 
-1. Compile a valid graph with `POST /api/v1/models/compile`; the response includes `model_id`.
-2. Request `POST /api/v1/models/quantize` with `{"model_id":"<source-id>","dtype":"int8"}`.
-3. The response returns a different `model_id` for the transformed model. The source model remains unchanged.
-4. Call `DELETE /api/v1/models/{model_id}` when either model handle is no longer needed.
-
-Supported output choices:
-
-- `int8`: dynamic INT8 quantization for `nn.Linear` modules. Non-Linear layers are not claimed to be INT8.
-- `float16`: converts floating parameters and buffers to FP16.
-- `bfloat16`: converts floating parameters and buffers to BF16.
-
-FP16/BF16 inputs at inference time must use a compatible dtype; benchmark the target device and validate outputs before deployment. Model handles are stored in process memory and are lost on backend restart; this is an initial local workflow, not persistent storage.
+The existing in-memory `POST /api/v1/models/quantize` endpoint remains for compiled ThinkNet model handles. The canvas workflow uses the separate local checkpoint job API. See [MODEL_QUANTIZATION.md](./MODEL_QUANTIZATION.md) for supported formats, validation, and API details.
 
 ## Node layout metadata
 

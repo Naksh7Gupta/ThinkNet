@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   FRAME_NODE_TYPE,
+  MODEL_LOADER_CATALOG,
+  MODEL_LOADER_NODE_TYPE,
+  QUANTIZER_NODE_TYPE,
   architectureGraph,
   cnnComponentGraph,
   decoderComponentGraph,
@@ -35,6 +38,50 @@ const linear: CatalogNode = {
 };
 
 describe("graph conversion", () => {
+  it("keeps loader and quantizer on the designer canvas without exporting them as tensor nodes", () => {
+    const quantizer: CatalogNode = {
+      ...linear,
+      type: "Quantizer",
+      category: "Model Transform",
+      color: "#EA580C",
+      execution_domain: "model-transform",
+      input_kind: "model",
+      output_kind: "quantized-model",
+    };
+    const graph = {
+      name: "model-workflow",
+      nodes: [
+        { id: "loader", type: "ModelLoader", config: { model_path: "C:\\models\\tiny" } },
+        { id: "quantizer", type: "Quantizer", config: { dtype: "float16" } },
+      ],
+      edges: [
+        {
+          source: "loader",
+          target: "quantizer",
+          source_port: "output",
+          target_port: "input",
+        },
+      ],
+    };
+    const flow = graphDefToFlow(
+      graph,
+      new Map([
+        ["ModelLoader", MODEL_LOADER_CATALOG],
+        ["Quantizer", quantizer],
+      ]),
+    );
+
+    expect(flow.nodes.map((node) => node.type)).toEqual([
+      MODEL_LOADER_NODE_TYPE,
+      QUANTIZER_NODE_TYPE,
+    ]);
+    expect(toGraphDef("model-workflow", flow.nodes, flow.edges)).toEqual({
+      name: "model-workflow",
+      nodes: [],
+      edges: [],
+    });
+  });
+
   it("round-trips the documented MLP graph without React Flow extras", () => {
     const graph = exampleMlpGraph();
     const catalog = new Map<string, CatalogNode>([["Linear", linear]]);

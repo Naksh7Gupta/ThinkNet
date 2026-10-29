@@ -102,6 +102,45 @@ export type QuantizeResponse = {
   note: string;
 };
 
+export type LocalModelInspection = {
+  model_name: string;
+  format: string;
+  architecture: string;
+  model_type: string;
+  parameter_count: number;
+  tensor_count: number;
+  size_bytes: number;
+  weight_bytes: number;
+  dtype_counts: Record<string, number>;
+};
+
+export type LocalQuantizationJobStatus = "queued" | "running" | "completed" | "failed";
+
+export type LocalQuantizationResult = {
+  output_path: string;
+  format: string;
+  dtype: "float16" | "bfloat16";
+  parameter_count: number;
+  source_size_bytes: number;
+  output_size_bytes: number;
+  size_reduction_bytes: number;
+  size_reduction_percent: number;
+  validation_status: "passed";
+  validation_message: string;
+};
+
+export type LocalQuantizationJob = {
+  job_id: string;
+  status: LocalQuantizationJobStatus;
+  phase: string;
+  progress: number;
+  message: string;
+  error: string | null;
+  result: LocalQuantizationResult | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ModelMetadata = {
   model_id: string;
   parameter_count: number;
@@ -142,6 +181,16 @@ export type ModelHandle = {
   graphName: string;
 };
 
+export type LocalModelAsset = {
+  path: string;
+  model_name: string;
+  format: string;
+  dtype: "float16" | "bfloat16";
+  parameter_count: number;
+  size_bytes: number;
+  source_path: string;
+  validation_status: "passed";
+};
 
 export type TrainingSettings = {
   learning_rate: number;

@@ -17,6 +17,8 @@ import type {
   TrainingJobStartResponse,
   TrainingPreflight,
   CancelTrainingJobResponse,
+  LocalModelInspection,
+  LocalQuantizationJob,
 } from "@/types/api";
 
 export const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
@@ -105,6 +107,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ model_id: modelId, dtype }),
     }),
+  inspectLocalModel: (modelPath: string) =>
+    request<LocalModelInspection>("/api/v1/local-models/inspect", {
+      method: "POST",
+      body: JSON.stringify({ model_path: modelPath }),
+    }),
+  startLocalQuantization: (input: {
+    model_path: string;
+    output_directory: string;
+    output_name: string;
+    dtype: "float16" | "bfloat16";
+  }) =>
+    request<LocalQuantizationJob>("/api/v1/local-models/quantization-jobs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  getLocalQuantizationJob: (jobId: string) =>
+    request<LocalQuantizationJob>(`/api/v1/local-models/quantization-jobs/${jobId}`),
   getModel: (modelId: string) => request<ModelMetadata>(`/api/v1/models/${modelId}`),
   deleteModel: (modelId: string) =>
     request<DeleteModelResponse>(`/api/v1/models/${modelId}`, { method: "DELETE" }),

@@ -20,6 +20,18 @@ export function getDesktopApiBase(): string {
   return desktopBridge()?.apiBase?.replace(/\/+$/, "") || "";
 }
 
+export async function selectModelInput(): Promise<string | null> {
+  const bridge = desktopBridge();
+  if (!bridge) throw new Error("Local model browsing is available in the ThinkNet desktop app.");
+  return bridge.selectModelInput();
+}
+
+export async function selectOutputDirectory(): Promise<string | null> {
+  const bridge = desktopBridge();
+  if (!bridge) throw new Error("Choosing a local output folder is available in the ThinkNet desktop app.");
+  return bridge.selectOutputDirectory();
+}
+
 export function useDesktopBackend() {
   const bridge = desktopBridge();
   const [status, setStatus] = useState<ThinkNetDesktopStatus | null>(null);

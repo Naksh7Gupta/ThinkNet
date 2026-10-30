@@ -320,3 +320,150 @@ def run_pipeline(payload: PipelineRunRequest):
         return execute_pipeline(payload.graph, payload.seed)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# Additional local-first adapters and project persistence. These components emit
+# the same artifact-reference contract as the CSV path, so the graph runner stays shared.
+import wave
+from datetime import datetime, timezone
+
+
+def _load_text(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    source = Path(str(config.get("path", ""))).expanduser()
+    if not source.is_file():
+        raise ValueError("Choose an existing UTF-8 text file.")
+    if source.stat().st_size > MAX_CSV_BYTES:
+        raise ValueError("Text file exceeds the 50 MiB MVP limit.")
+    text = source.read_text(encoding="utf-8-sig")
+    if not text.strip():
+        raise ValueError("Text file is empty.")
+    mode = str(config.get("split", "lines"))
+    documents = [line.strip() for line in text.splitlines() if line.strip()] if mode == "lines" else [text]
+    if not documents:
+        raise ValueError("No non-empty text documents were found.")
+    rows = [{"text": item, "label": ""} for item in documents]
+    return {"dataset": _write_csv(rows, ["text", "label"]),
+            "metadata": {"modality": "text", "documents": len(rows), "source_name": source.name}}
+
+
+def _load_image_folder(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    root = Path(str(config.get("path", ""))).expanduser()
+    if not root.is_dir():
+        raise ValueError("Choose an image dataset directory with one subdirectory per class.")
+    allowed = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
+    rows = []
+    for class_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+        for file in sorted(p for p in class_dir.rglob("*") if p.is_file() and p.suffix.lower() in allowed):
+            rows.append({"path": str(file.resolve()), "label": class_dir.name})
+    if not rows:
+        raise ValueError("No supported images found. Expected class-name subfolders.")
+    return {"dataset": _write_csv(rows, ["path", "label"]),
+            "metadata": {"modality": "image", "images": len(rows), "classes": sorted({r["label"] for r in rows})}}
+
+
+def _load_audio_folder(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    root = Path(str(config.get("path", ""))).expanduser()
+    if not root.is_dir():
+        raise ValueError("Choose an audio dataset directory with one subdirectory per class.")
+    rows = []
+    for class_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+        for file in sorted(p for p in class_dir.rglob("*.wav") if p.is_file()):
+            try:
+                with wave.open(str(file), "rb") as audio:
+                    frames, rate = audio.getnframes(), audio.getframerate()
+                    channels = audio.getnchannels()
+            except (wave.Error, EOFError) as exc:
+                raise ValueError(f"Invalid WAV file: {file.name}") from exc
+            if rate <= 0 or frames <= 0:
+                continue
+            rows.append({"path": str(file.resolve()), "label": class_dir.name,
+                         "sample_rate": rate, "channels": channels, "duration_seconds": frames / rate})
+    if not rows:
+        raise ValueError("No valid WAV files found in class-name subfolders.")
+    return {"dataset": _write_csv(rows, ["path", "label", "sample_rate", "channels", "duration_seconds"]),
+            "metadata": {"modality": "audio", "clips": len(rows), "classes": sorted({r["label"] for r in rows})}}
+
+
+COMPONENTS.update({
+    "text.load": {"inputs": {}, "outputs": {"dataset": "dataset_ref", "metadata": "metadata"}, "run": _load_text},
+    "image.folder": {"inputs": {}, "outputs": {"dataset": "dataset_ref", "metadata": "metadata"}, "run": _load_image_folder},
+    "audio.wav_folder": {"inputs": {}, "outputs": {"dataset": "dataset_ref", "metadata": "metadata"}, "run": _load_audio_folder},
+})
+
+
+PROJECT_ROOT = Path(os.environ.get(
+    "THINKNET_PIPELINE_PROJECT_DIR", str(ROOT / "projects" / "pipelines")
+)).expanduser().resolve()
+
+
+class PipelineProject(BaseModel):
+    project_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$")
+    name: str = Field(min_length=1, max_length=120)
+    graph: PipelineGraph
+    description: str = Field(default="", max_length=2000)
+
+
+def _project_file(project_id: str) -> Path:
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}", project_id):
+        raise ValueError("Invalid project ID.")
+    return PROJECT_ROOT / f"{project_id}.json"
+
+
+import re
+
+
+@router.get("/projects")
+def list_pipeline_projects():
+    PROJECT_ROOT.mkdir(parents=True, exist_ok=True)
+    projects = []
+    for path in sorted(PROJECT_ROOT.glob("*.json")):
+        try:
+            item = json.loads(path.read_text(encoding="utf-8"))
+            projects.append({key: item[key] for key in ("project_id", "name", "description", "updated_at")})
+        except (OSError, ValueError, KeyError):
+            continue
+    return {"projects": projects}
+
+
+@router.get("/projects/{project_id}")
+def get_pipeline_project(project_id: str):
+    try:
+        path = _project_file(project_id)
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Pipeline project not found.")
+        return json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/projects/{project_id}")
+def save_pipeline_project(project_id: str, payload: PipelineProject):
+    if project_id != payload.project_id:
+        raise HTTPException(status_code=400, detail="Path project ID must match payload project_id.")
+    try:
+        _order(payload.graph)
+        PROJECT_ROOT.mkdir(parents=True, exist_ok=True)
+        path = _project_file(project_id)
+        created_at = _now()
+        if path.is_file():
+            try:
+                created_at = json.loads(path.read_text(encoding="utf-8")).get("created_at", created_at)
+            except (OSError, ValueError):
+                pass
+        record = payload.model_dump(mode="json") | {"created_at": created_at, "updated_at": _now()}
+        path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        return record
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/projects/{project_id}")
+def delete_pipeline_project(project_id: str):
+    try:
+        path = _project_file(project_id)
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Pipeline project not found.")
+        path.unlink()
+        return {"deleted": True, "project_id": project_id}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

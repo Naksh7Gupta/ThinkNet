@@ -84,7 +84,10 @@ Additional local components:
 - `audio.wav_folder`: indexes WAV files in class-name subfolders and records sample rate, channels and duration.
 - `model.build_graph` and `model.import_weights`: compile a supplied ThinkNet graph or safely load a state-dict checkpoint with its matching graph.
 - `model.train_classifier`, `model.evaluate_classifier`, and `model.infer`: basic supervised numeric-tabular classification using the compiled model.
-- `python.custom`: invokes a user-selected Python script with JSON input/output files and a 30-second timeout. The script must accept input and output file paths as its two command-line arguments; input JSON contains `rows`, `columns`, and `config`; it must write a JSON list of row objects to the output path.
+- `multimodal.join`: inner-joins two modality datasets on a shared sample ID.
+- `robotics.ros2_jsonl`: ingests flattened ROS 2 telemetry exported as JSONL/NDJSON.
+- `model.train_classifier`, `model.evaluate_classifier`, and `model.infer`: basic supervised numeric-tabular classification using the compiled model.
+- `python.custom`: invokes a user-selected Python script with JSON input/output files and a 30-second timeout. The script must accept input and output file paths as its two command-line arguments; input JSON contains `rows`, `columns`, and `config`; it must write a JSON list of row objects to the output path. **Only run scripts you trust**: custom Python executes on the local machine with the backend user’s permissions.
 
 Persistent projects are stored locally below `projects/pipelines` by default. Configure the directory with `THINKNET_PIPELINE_PROJECT_DIR`.
 
@@ -93,8 +96,10 @@ Persistent projects are stored locally below `projects/pipelines` by default. Co
 - Tabular classification: `csv.load → dataset.select_xy → dataset.split_xy → model.build_graph → model.train_classifier → model.evaluate_classifier`.
 - Text ingestion: `text.load → dataset.inspect`.
 - Image/audio ingestion: `image.folder` or `audio.wav_folder → dataset.inspect`.
+- Multimodal sample pairing: image/text/audio datasets with shared `sample_id` values → `multimodal.join`.
+- Robotics telemetry: `robotics.ros2_jsonl → dataset.inspect` for flattened ROS 2 exports.
 
-The image/audio nodes currently index files and labels; they do not yet decode, augment, batch, or train neural vision/audio models. Text ingestion currently creates document records; tokenizer, embedding, language-model training, and text evaluation adapters are still follow-up work.
+The image/audio nodes currently index files and labels; they do not yet decode, augment, batch, or train neural vision/audio models. Text ingestion currently creates document records; tokenizer, embedding, language-model training, and text evaluation adapters are still follow-up work. The multimodal join aligns records by sample ID but does not itself fuse neural embeddings. The robotics adapter reads recorded ROS 2 telemetry exports; it does not connect to live ROS 2 nodes, control robots, or deploy policies to hardware. Model handles currently live in backend memory during a run; durable model registry/checkpoint lifecycle is still future work. Remote GPU execution is intentionally out of scope for this PR.
 
 ## Important boundaries
 

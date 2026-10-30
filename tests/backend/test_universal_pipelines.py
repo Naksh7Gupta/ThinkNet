@@ -405,7 +405,7 @@ def test_causal_llm_pipeline_component_wraps_managed_training(tmp_path, monkeypa
         '"token_count": 900, "vocabulary_size": 50257, "device": "cpu"}',
         encoding="utf-8",
     )
-    (output / "metrics.jsonl").write_text('{"step": 12, "loss": 2.5}\\n', encoding="utf-8")
+    (output / "metrics.jsonl").write_text('{"step": 12, "loss": 2.5}\n', encoding="utf-8")
     monkeypatch.setattr(training_jobs, "start_training_job",
                         lambda _payload: {"job": {"job_id": job_id}})
     monkeypatch.setattr(training_jobs, "get_training_job",

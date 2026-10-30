@@ -142,6 +142,152 @@ def _predict(_config: dict[str, Any], inputs: dict[str, Any], _context: dict[str
     return {"predictions": {"task": model["task"], "count": len(values), "values": values}}
 
 
+def _torch_fit(config: dict[str, Any], inputs: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    import torch.nn.functional as F
+    from torch.utils.data import DataLoader, TensorDataset
+    from services.backend.thinknet_pipelines import _get_model, _resolve_device
+
+    task = str(config.get("task", "classification"))
+    if task not in {"classification", "regression"}:
+        raise ValueError("PyTorch supervised training supports classification or regression.")
+    x_values, columns = _matrix(inputs["X"])
+    y_values = _targets(inputs["Y"])
+    if len(x_values) != len(y_values):
+        raise ValueError("Feature and target row counts differ.")
+    classes = sorted(set(y_values)) if task == "classification" else []
+    x = torch.tensor(x_values, dtype=torch.float32)
+    if task == "classification":
+        y = torch.tensor([classes.index(value) for value in y_values], dtype=torch.long)
+    else:
+        try:
+            y = torch.tensor([float(value) for value in y_values], dtype=torch.float32).reshape(-1, 1)
+        except ValueError as exc:
+            raise ValueError("Regression targets must be numeric.") from exc
+    epochs = int(config.get("epochs", 10))
+    batch_size = int(config.get("batch_size", 32))
+    learning_rate = float(config.get("learning_rate", 1e-3))
+    if not 1 <= epochs <= 1000 or not 1 <= batch_size <= 4096 or not 0 < learning_rate <= 1:
+        raise ValueError("Use epochs 1–1000, batch_size 1–4096, and learning_rate in (0, 1].")
+    model_ref = inputs["model"]
+    model = _get_model(model_ref)
+    device = _resolve_device(config.get("device", "auto"))
+    generator = torch.Generator().manual_seed(int(context["seed"]))
+    loader = DataLoader(TensorDataset(x, y), batch_size=batch_size, shuffle=True,
+                        generator=generator, num_workers=0)
+    optimizer_name = str(config.get("optimizer", "adamw")).lower()
+    if optimizer_name == "adamw":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    elif optimizer_name == "sgd":
+        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+    else:
+        raise ValueError("optimizer must be 'adamw' or 'sgd'.")
+    model.to(device)
+    history = []
+    for epoch in range(epochs):
+        if context.get("cancel_event") is not None and context["cancel_event"].is_set():
+            raise RuntimeError("PyTorch training cancelled.")
+        model.train()
+        total_loss, correct, seen = 0.0, 0, 0
+        for batch_x, batch_y in loader:
+            if context.get("cancel_event") is not None and context["cancel_event"].is_set():
+                raise RuntimeError("PyTorch training cancelled.")
+            batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+            optimizer.zero_grad(set_to_none=True)
+            output = model(batch_x)
+            if isinstance(output, (tuple, list)):
+                output = output[0]
+            if task == "classification":
+                if output.ndim != 2 or output.shape != (len(batch_y), len(classes)):
+                    raise ValueError(f"Classifier graph must output [batch, {len(classes)}] logits.")
+                loss = F.cross_entropy(output, batch_y)
+                correct += int((output.argmax(dim=1) == batch_y).sum())
+            else:
+                output = output.reshape(-1)
+                if output.shape != batch_y.reshape(-1).shape:
+                    raise ValueError("Regression graph must output one scalar per sample.")
+                loss = F.mse_loss(output, batch_y.reshape(-1))
+            loss.backward()
+            optimizer.step()
+            total_loss += float(loss.detach()) * len(batch_y)
+            seen += len(batch_y)
+        record = {"epoch": epoch + 1, "loss": total_loss / max(1, seen)}
+        if task == "classification":
+            record["accuracy"] = correct / max(1, seen)
+        history.append(record)
+        callback = context.get("progress_callback")
+        if callback:
+            callback(str(context.get("current_node_id", "torch_fit")),
+                     100.0 * (epoch + 1) / epochs, f"PyTorch {task} training epoch {epoch + 1}/{epochs}")
+    model.to("cpu").eval()
+    enriched_ref = {**model_ref, "task": task, "classes": classes, "feature_columns": columns}
+    return {"model": enriched_ref, "metrics": {"task": task, "epochs": epochs,
+            "samples": len(x_values), "training_loss": history[-1]["loss"],
+            "training_accuracy": history[-1].get("accuracy"), "history": history,
+            "device": str(device), "classes": classes}}
+
+
+def _torch_evaluate(_config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    import torch.nn.functional as F
+    from services.backend.thinknet_pipelines import _get_model
+
+    ref = inputs["model"]
+    task = str(ref.get("task", "classification"))
+    classes = list(ref.get("classes", []))
+    x_values, columns = _matrix(inputs["X"])
+    if columns != ref.get("feature_columns"):
+        raise ValueError("Evaluation feature columns/order do not match training.")
+    y_values = _targets(inputs["Y"])
+    if len(x_values) != len(y_values):
+        raise ValueError("Evaluation feature and target row counts differ.")
+    model = _get_model(ref).eval()
+    with torch.no_grad():
+        output = model(torch.tensor(x_values, dtype=torch.float32))
+        if isinstance(output, (tuple, list)):
+            output = output[0]
+        if task == "classification":
+            if output.ndim != 2 or output.shape[1] != len(classes):
+                raise ValueError("Classifier output width does not match its saved class labels.")
+            target = torch.tensor([classes.index(value) for value in y_values], dtype=torch.long)
+            predicted = output.argmax(dim=1)
+            return {"report": {"task": task, "samples": len(y_values),
+                    "accuracy": float((predicted == target).float().mean()),
+                    "loss": float(F.cross_entropy(output, target)),
+                    "classes": classes}}
+        actual = torch.tensor([float(value) for value in y_values], dtype=torch.float32)
+        predicted = output.reshape(-1)
+        if predicted.shape != actual.shape:
+            raise ValueError("Regression graph must output one scalar per sample.")
+        error = predicted - actual
+        mae = float(error.abs().mean())
+        rmse = float(torch.sqrt((error ** 2).mean()))
+        denominator = float(((actual - actual.mean()) ** 2).sum())
+        r2 = 1.0 - float((error ** 2).sum()) / denominator if denominator > 0 else None
+        return {"report": {"task": task, "samples": len(y_values), "mae": mae, "rmse": rmse, "r2": r2}}
+
+
+def _torch_predict(_config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    from services.backend.thinknet_pipelines import _get_model
+
+    ref = inputs["model"]
+    x_values, columns = _matrix(inputs["X"])
+    if columns != ref.get("feature_columns"):
+        raise ValueError("Inference feature columns/order do not match training.")
+    model = _get_model(ref).eval()
+    with torch.no_grad():
+        output = model(torch.tensor(x_values, dtype=torch.float32))
+        if isinstance(output, (tuple, list)):
+            output = output[0]
+        if ref.get("task") == "classification":
+            indices = output.argmax(dim=1).tolist()
+            values = [ref["classes"][index] for index in indices]
+        else:
+            values = output.reshape(-1).tolist()
+    return {"predictions": {"task": ref.get("task"), "count": len(values), "values": values}}
+
+
 def _tfidf(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
     from sklearn.feature_extraction.text import TfidfVectorizer
     from services.backend.thinknet_pipelines import _read_csv, _write_csv
@@ -209,6 +355,9 @@ def register(components: dict[str, dict[str, Any]]) -> None:
         "text.tfidf_split": {"inputs": {"X_train": "dataset_ref", "X_test": "dataset_ref"}, "outputs": {"X_train": "dataset_ref", "X_test": "dataset_ref", "metadata": "metadata"}, "run": _tfidf_split},
         "text.tfidf": {"inputs": {"dataset": "dataset_ref"}, "outputs": {
             "dataset": "dataset_ref", "metadata": "metadata"}, "run": _tfidf},
+        "torch.fit": {"inputs": {"model": "model_ref", "X": "dataset_ref", "Y": "dataset_ref"}, "outputs": {"model": "model_ref", "metrics": "metadata"}, "run": _torch_fit},
+        "torch.evaluate": {"inputs": {"model": "model_ref", "X": "dataset_ref", "Y": "dataset_ref"}, "outputs": {"report": "metadata"}, "run": _torch_evaluate},
+        "torch.predict": {"inputs": {"model": "model_ref", "X": "dataset_ref"}, "outputs": {"predictions": "metadata"}, "run": _torch_predict},
         "ml.fit": {"inputs": {"X": "dataset_ref", "Y": "dataset_ref?"}, "outputs": {
             "model": "ml_model_ref", "metrics": "metadata"}, "run": _fit},
         "ml.evaluate": {"inputs": {"model": "ml_model_ref", "X": "dataset_ref", "Y": "dataset_ref?"}, "outputs": {

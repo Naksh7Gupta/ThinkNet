@@ -28,7 +28,7 @@ type CanvasData = {
 };
 
 type CanvasNode = Node<CanvasData>;
-type CanvasEdge = Edge;
+type CanvasEdge = Edge<{ sourcePort: string; targetPort: string }>;
 
 const DEFAULT_POSITION = { x: 180, y: 100 };
 
@@ -62,8 +62,8 @@ export function PipelineWorkspace() {
       return {
         source: edge.source,
         target: edge.target,
-        source_port: source?.data.outputPort ?? "output",
-        target_port: target?.data.inputPort ?? "input",
+        source_port: edge.data?.sourcePort ?? source?.data.outputPort ?? "output",
+        target_port: edge.data?.targetPort ?? target?.data.inputPort ?? "input",
       };
     }),
   }), [name, nodes, edges]);
@@ -90,7 +90,21 @@ export function PipelineWorkspace() {
 
   const onConnect = (connection: Connection) => {
     if (!connection.source || !connection.target || connection.source === connection.target) return;
-    setEdges((current) => addEdge({ ...connection, type: "smoothstep" }, current));
+    const source = nodes.find((node) => node.id === connection.source);
+    const target = nodes.find((node) => node.id === connection.target);
+    const targetComponent = catalog.data?.components.find((item) => item.type === target?.data.type);
+    if (!source || !target || !targetComponent) return;
+    const used = new Set(edges.filter((edge) => edge.target === target.id).map((edge) => edge.data?.targetPort));
+    const targetPort = Object.keys(targetComponent.inputs).find((port) => !used.has(port));
+    if (!targetPort) {
+      setError("All input ports on this component are already connected.");
+      return;
+    }
+    setEdges((current) => addEdge({
+      ...connection,
+      type: "smoothstep",
+      data: { sourcePort: source.data.outputPort, targetPort },
+    }, current));
   };
 
   const validate = useMutation({
@@ -156,6 +170,7 @@ export function PipelineWorkspace() {
       setEdges(project.graph.edges.map((edge, index) => ({
         id: `e-${index}`, source: edge.source, target: edge.target,
         sourceHandle: null, targetHandle: null, type: "smoothstep",
+        data: { sourcePort: edge.source_port, targetPort: edge.target_port },
       })));
       setSelectedId(null);
       setNotice(`Opened “${project.name}”.`);

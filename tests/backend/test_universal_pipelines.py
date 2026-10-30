@@ -44,6 +44,7 @@ def test_catalog_exposes_core_pipeline_components():
         "python.custom",
         "multimodal.join",
         "llm.train_causal",
+        "llm.load",
         "llm.generate",
         "text.tfidf_split",
         "torch.fit",
@@ -422,3 +423,22 @@ def test_causal_llm_pipeline_component_wraps_managed_training(tmp_path, monkeypa
     assert result["model"]["job_id"] == job_id
     assert result["metrics"]["steps_completed"] == 12
     assert result["metrics"]["last_metrics"]["loss"] == 2.5
+
+
+def test_llm_load_resolves_persisted_training_artifacts(tmp_path, monkeypatch):
+    from services.backend import thinknet_training_jobs as training_jobs
+
+    job_id = "abcdef012345"
+    monkeypatch.setattr(training_jobs, "JOB_ROOT", tmp_path)
+    output = tmp_path / job_id
+    (output / "tokenizer").mkdir(parents=True)
+    for name in ("graph.json", "training.json", "model_state_dict.pt"):
+        (output / name).write_text("{}", encoding="utf-8")
+    (output / "manifest.json").write_text(
+        '{"task": "causal_language_modeling", "steps_completed": 10, '
+        '"parameter_count": 1000, "vocabulary_size": 50257, "device": "cpu"}',
+        encoding="utf-8",
+    )
+    result = pipelines._llm_load({"job_id": job_id}, {}, {})
+    assert result["model"]["job_id"] == job_id
+    assert result["model"]["manifest"]["steps_completed"] == 10

@@ -6,3 +6,5 @@ uvicorn[standard]>=0.27
 transformers>=4.40
 safetensors>=0.4.3
 accelerate>=0.26
+
+scikit-learn>=1.4

@@ -168,7 +168,8 @@ def _tfidf(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, A
         output_rows.append(item)
     return {"dataset": _write_csv(output_rows, feature_names + ([label_column] if label_column in columns else [])),
             "metadata": {"method": "tfidf", "documents": len(rows),
-                         "features": len(feature_names), "feature_columns": feature_names,\n                         "vocabulary_size": len(vectorizer.vocabulary_)}}
+                         "features": len(feature_names), "feature_columns": feature_names,
+                         "vocabulary_size": len(vectorizer.vocabulary_)}}
 
 
 def _tfidf_split(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:

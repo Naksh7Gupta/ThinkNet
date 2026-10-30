@@ -257,3 +257,58 @@ export type TrainingPreflight = {
   max_steps?: number;
   message: string;
 };
+
+
+export type PipelineNode = {
+  id: string;
+  type: string;
+  config: Record<string, unknown>;
+};
+
+export type PipelineEdge = {
+  source: string;
+  target: string;
+  source_port: string;
+  target_port: string;
+};
+
+export type PipelineGraph = {
+  name: string;
+  nodes: PipelineNode[];
+  edges: PipelineEdge[];
+};
+
+export type PipelineComponent = {
+  type: string;
+  inputs: Record<string, string>;
+  outputs: Record<string, string>;
+};
+
+export type PipelineComponentCatalog = {
+  components: PipelineComponent[];
+};
+
+export type PipelineValidation = {
+  valid: boolean;
+  node_count?: number;
+  edge_count?: number;
+  execution_order?: string[];
+  errors?: string[];
+};
+
+export type PipelineRun = {
+  run_id: string;
+  name: string;
+  status: "completed" | "failed";
+  nodes: Array<{
+    node_id: string;
+    type: string;
+    status: "completed" | "failed";
+    started_at: string;
+    finished_at: string;
+    error?: string;
+  }>;
+  outputs?: Record<string, Record<string, unknown>>;
+  error?: string;
+  run_record?: string;
+};

@@ -13,7 +13,7 @@ import {
 } from "@xyflow/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, Save, ShieldCheck, Plus, FolderOpen, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,13 @@ export function PipelineWorkspace() {
   const [configText, setConfigText] = useState("{}");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const activeJob = useQuery({
+    queryKey: ["pipeline-job", activeJobId],
+    queryFn: () => api.getPipelineJob(activeJobId as string),
+    enabled: Boolean(activeJobId),
+    refetchInterval: (query) => ["queued", "running", "cancelling"].includes(query.state.data?.status ?? "") ? 700 : false,
+  });
 
   const graph = useMemo<PipelineGraph>(() => ({
     name,
@@ -128,6 +135,96 @@ export function PipelineWorkspace() {
     setNotice("MNIST starter loaded. Configure the dataset path if needed, then run the pipeline.");
   };
 
+  const loadTemplate = (template: string) => {
+    type Definition = { id: string; type: string; config: Record<string, unknown>; inputPort: string; outputPort: string };
+    let definitions: Definition[] = [];
+    let connections: Array<[string, string, string, string]> = [];
+    let title = "";
+    if (template === "sentiment") {
+      title = "Sentiment Analysis";
+      definitions = [
+        { id: "load", type: "csv.load", config: { path: "C:/datasets/sentiment.csv" }, inputPort: "input", outputPort: "dataset" },
+        { id: "xy", type: "dataset.select_xy", config: { feature_columns: ["text"], target_column: "label" }, inputPort: "dataset", outputPort: "X" },
+        { id: "split", type: "dataset.split_xy", config: { validation_fraction: 0, test_fraction: 0.2 }, inputPort: "X", outputPort: "X_train" },
+        { id: "vectorize", type: "text.tfidf_split", config: { text_column: "text", max_features: 2048 }, inputPort: "X_train", outputPort: "X_train" },
+        { id: "fit", type: "ml.fit", config: { task: "classification", estimator: "logistic_regression" }, inputPort: "X", outputPort: "model" },
+        { id: "evaluate", type: "ml.evaluate", config: {}, inputPort: "model", outputPort: "report" },
+        { id: "predict", type: "ml.predict", config: {}, inputPort: "model", outputPort: "predictions" },
+      ];
+      connections = [
+        ["load", "xy", "dataset", "dataset"], ["xy", "split", "X", "X"], ["xy", "split", "Y", "Y"],
+        ["split", "vectorize", "X_train", "X_train"], ["split", "vectorize", "X_test", "X_test"],
+        ["vectorize", "fit", "X_train", "X"], ["split", "fit", "Y_train", "Y"],
+        ["fit", "evaluate", "model", "model"], ["vectorize", "evaluate", "X_test", "X"],
+        ["split", "evaluate", "Y_test", "Y"], ["fit", "predict", "model", "model"],
+        ["vectorize", "predict", "X_test", "X"],
+      ];
+    } else if (template === "classification" || template === "regression") {
+      const regression = template === "regression";
+      title = regression ? "Tabular Regression" : "Tabular Classification";
+      definitions = [
+        { id: "load", type: "csv.load", config: { path: "C:/datasets/data.csv" }, inputPort: "input", outputPort: "dataset" },
+        { id: "xy", type: "dataset.select_xy", config: { feature_columns: ["feature_1"], target_column: "target" }, inputPort: "dataset", outputPort: "X" },
+        { id: "split", type: "dataset.split_xy", config: { validation_fraction: 0, test_fraction: 0.2 }, inputPort: "X", outputPort: "X_train" },
+        { id: "fit", type: "ml.fit", config: { task: regression ? "regression" : "classification", estimator: regression ? "linear_regression" : "logistic_regression" }, inputPort: "X", outputPort: "model" },
+        { id: "evaluate", type: "ml.evaluate", config: {}, inputPort: "model", outputPort: "report" },
+        { id: "predict", type: "ml.predict", config: {}, inputPort: "model", outputPort: "predictions" },
+      ];
+      connections = [
+        ["load", "xy", "dataset", "dataset"], ["xy", "split", "X", "X"], ["xy", "split", "Y", "Y"],
+        ["split", "fit", "X_train", "X"], ["split", "fit", "Y_train", "Y"],
+        ["fit", "evaluate", "model", "model"], ["split", "evaluate", "X_test", "X"],
+        ["split", "evaluate", "Y_test", "Y"], ["fit", "predict", "model", "model"],
+        ["split", "predict", "X_test", "X"],
+      ];
+    } else if (template === "clustering") {
+      title = "Customer Clustering";
+      definitions = [
+        { id: "load", type: "csv.load", config: { path: "C:/datasets/customers.csv" }, inputPort: "input", outputPort: "dataset" },
+        { id: "xy", type: "dataset.select_xy", config: { feature_columns: ["feature_1", "feature_2"] }, inputPort: "dataset", outputPort: "X" },
+        { id: "fit", type: "ml.fit", config: { task: "clustering", estimator: "kmeans", clusters: 3 }, inputPort: "X", outputPort: "model" },
+        { id: "evaluate", type: "ml.evaluate", config: {}, inputPort: "model", outputPort: "report" },
+      ];
+      connections = [["load", "xy", "dataset", "dataset"], ["xy", "fit", "X", "X"], ["fit", "evaluate", "model", "model"], ["xy", "evaluate", "X", "X"]];
+    } else if (template === "llm") {
+      title = "Causal Language Model Training";
+      const modelGraph = {
+        name: "small-causal-transformer",
+        nodes: [
+          { id: "tokens", type: "Input", config: { shape: [128] } },
+          { id: "decoder", type: "Architecture", config: { architecture: "decoder_transformer_lm", config: { vocab_size: 128, d_model: 64, num_layers: 2, num_heads: 4, max_seq_len: 128, dropout: 0.0 } } },
+          { id: "output", type: "Output", config: {} },
+        ],
+        edges: [
+          { source: "tokens", target: "decoder", source_port: "output", target_port: "input" },
+          { source: "decoder", target: "output", source_port: "output", target_port: "input" },
+        ],
+      };
+      definitions = [
+        { id: "llm_train", type: "llm.train_causal", config: { model_graph: modelGraph, training: { dataset_path: "services/backend/data/text.txt", tokenizer_name: "gpt2", sequence_length: 128, batch_size: 4, max_steps: 100, log_every_steps: 10, save_every_steps: 50, learning_rate: 0.0003, weight_decay: 0.01, gradient_clip_norm: 1, seed: 42, output_dir: "training_output" } }, inputPort: "input", outputPort: "model" },
+        { id: "generate", type: "llm.generate", config: { prompt: "Artificial intelligence is", max_new_tokens: 40, temperature: 1 }, inputPort: "model", outputPort: "predictions" },
+      ];
+      connections = [["llm_train", "generate", "model", "model"]];
+    } else {
+      setError("Unknown pipeline template.");
+      return;
+    }
+    const positions = definitions.map((_, index) => ({ x: 80 + (index % 4) * 280, y: 100 + Math.floor(index / 4) * 230 }));
+    setNodes(definitions.map((item, index) => ({
+      id: item.id, type: "default", position: positions[index],
+      data: { label: item.type, type: item.type, config: item.config, inputPort: item.inputPort, outputPort: item.outputPort },
+    })));
+    setEdges(connections.map(([source, target, sourcePort, targetPort], index) => ({
+      id: `template-edge-${index}`, source, target, sourceHandle: null, targetHandle: null,
+      type: "smoothstep", data: { sourcePort, targetPort },
+    })));
+    setName(title);
+    setProjectId(slug(title));
+    setSelectedId(null);
+    setError("");
+    setNotice(`${title} template loaded. Update the dataset path and column names, then validate.`);
+  };
+
   const addNode = (type: string) => {
     const item = catalog.data?.components.find((component) => component.type === type);
     if (!item) return;
@@ -175,24 +272,36 @@ export function PipelineWorkspace() {
   });
 
   const run = useMutation({
-    mutationFn: () => api.runPipeline(graph),
-    onSuccess: (result) => {
-      setError(result.status === "failed" ? result.error ?? "Pipeline failed." : "");
-      if (result.status === "completed") {
-        const metrics = result.outputs?.mnist_train?.metrics as { training_accuracy?: number; training_loss?: number } | undefined;
-        const report = result.outputs?.mnist_evaluate?.report as { accuracy?: number; loss?: number } | undefined;
-        const saved = result.outputs?.mnist_save?.model as { checkpoint_id?: string } | undefined;
-        const summary = report?.accuracy !== undefined
-          ? ` · test accuracy ${(report.accuracy * 100).toFixed(1)}%`
-          : metrics?.training_accuracy !== undefined
-            ? ` · training accuracy ${(metrics.training_accuracy * 100).toFixed(1)}%` : "";
-        setNotice(`Run ${result.run_id} completed${summary}. ${saved?.checkpoint_id ? `Saved model ID: ${saved.checkpoint_id}` : `Run record: ${result.run_record ?? "saved"}`}`);
-      } else {
-        setNotice("");
-      }
+    mutationFn: () => api.startPipelineJob(graph),
+    onSuccess: (job) => {
+      setActiveJobId(job.job_id);
+      setError("");
+      setNotice(`Pipeline queued · Job ${job.job_id}. You can continue editing while it runs.`);
     },
-    onError: (reason) => setError(reason instanceof Error ? reason.message : "Pipeline run failed."),
+    onError: (reason) => setError(reason instanceof Error ? reason.message : "Pipeline could not be queued."),
   });
+
+  const cancelRun = useMutation({
+    mutationFn: () => api.cancelPipelineJob(activeJobId as string),
+    onSuccess: () => setNotice("Cancellation requested. The active component will finish before the next node is skipped."),
+    onError: (reason) => setError(reason instanceof Error ? reason.message : "Could not cancel pipeline."),
+  });
+
+  useEffect(() => {
+    const job = activeJob.data;
+    if (!job) return;
+    if (job.status === "completed") {
+      setError("");
+      setNotice(`Run ${job.run_id ?? job.result?.run_id ?? job.job_id} completed. Experiment saved to local history.`);
+      void client.invalidateQueries({ queryKey: ["pipeline-experiments"] });
+    } else if (job.status === "failed") {
+      setError(job.error ?? job.result?.error ?? job.message);
+      setNotice("");
+    } else if (job.status === "cancelled") {
+      setNotice("Pipeline cancelled. Completed node outputs are retained in the experiment record.");
+    }
+  }, [activeJob.data, client]);
+
 
   const save = useMutation({
     mutationFn: () => {
@@ -277,10 +386,19 @@ export function PipelineWorkspace() {
           <option value="">Open project…</option>
           {(projects.data?.projects ?? []).map((project) => <option key={project.project_id} value={project.project_id}>{project.name}</option>)}
         </select>
+        <select aria-label="Load pipeline template" className="h-9 max-w-52 rounded-md border border-border bg-card px-2 text-sm" defaultValue="" onChange={(event) => { if (event.target.value) loadTemplate(event.target.value); event.target.value = ""; }}>
+          <option value="">Load template…</option>
+          <option value="sentiment">Sentiment / spam classification</option>
+          <option value="classification">Tabular classification</option>
+          <option value="regression">Regression</option>
+          <option value="clustering">Clustering</option>
+          <option value="llm">Causal LLM training</option>
+        </select>
         <Button variant="secondary" onClick={loadMnistStarter}><Sparkles className="h-4 w-4" /> MNIST starter</Button>
         <Button variant="secondary" onClick={() => save.mutate()} disabled={save.isPending}><Save className="h-4 w-4" /> Save</Button>
         <Button variant="secondary" onClick={() => validate.mutate()} disabled={validate.isPending}><ShieldCheck className="h-4 w-4" /> Validate</Button>
-        <Button onClick={() => run.mutate()} disabled={run.isPending || nodes.length === 0}><Play className="h-4 w-4" /> Run pipeline</Button>
+        <Button onClick={() => run.mutate()} disabled={run.isPending || ["queued", "running", "cancelling"].includes(activeJob.data?.status ?? "") || nodes.length === 0}><Play className="h-4 w-4" /> Run pipeline</Button>
+        {["queued", "running"].includes(activeJob.data?.status ?? "") && <Button variant="secondary" onClick={() => cancelRun.mutate()} disabled={cancelRun.isPending}>Cancel</Button>}
       </div>
       <div className="flex min-h-0 flex-1">
         <aside className="w-60 shrink-0 overflow-y-auto border-r border-border bg-card p-3">
@@ -325,6 +443,12 @@ export function PipelineWorkspace() {
           ) : <p className="text-xs text-muted-foreground">Select a node to configure it.</p>}
         </aside>
       </div>
+      {activeJob.data && <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
+        <span className="font-medium">{activeJob.data.status.toUpperCase()}</span>
+        {activeJob.data.current_node ? ` · ${activeJob.data.current_node}` : ""}
+        {activeJob.data.message ? ` · ${activeJob.data.message}` : ""}
+        {activeJob.data.nodes.length ? ` · ${activeJob.data.nodes.filter((node) => node.status === "completed").length}/${activeJob.data.nodes.length} components complete` : ""}
+      </div>}
       {(error || notice) && <div className={`border-t border-border px-4 py-2 text-xs ${error ? "text-destructive" : "text-muted-foreground"}`}>{error || notice}</div>}
     </div>
   );

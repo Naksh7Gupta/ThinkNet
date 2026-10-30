@@ -84,13 +84,9 @@ def _execute(job_id: str, graph: PipelineGraph, seed: int, cancel: threading.Eve
                        message=message, updated_at=_now())
     try:
         result = execute_pipeline(graph, seed, on_node=node_update, on_progress=progress_update, cancel_event=cancel)
-        result["experiment"] = {
-            "run_id": result["run_id"],
-            "name": result["name"],
-            "seed": seed,
-            "graph": graph.model_dump(mode="json"),
-            "created_at": _now(),
-        }
+        result["seed"] = seed
+        result["graph"] = graph.model_dump(mode="json")
+        result["created_at"] = _now()
         _persist_run(result)
         status = result["status"]
         with _LOCK:

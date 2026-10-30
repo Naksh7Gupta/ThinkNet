@@ -933,3 +933,8 @@ COMPONENTS.update({
     "multimodal.join": {"inputs": {"left": "dataset_ref", "right": "dataset_ref"}, "outputs": {
         "dataset": "dataset_ref", "metadata": "metadata"}, "run": _multimodal_join},
 })
+
+
+# Register reusable task adapters on the same DAG execution engine.
+from services.backend.thinknet_ml_engine import register as _register_ml_components
+_register_ml_components(COMPONENTS)

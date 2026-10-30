@@ -43,6 +43,9 @@ def test_catalog_exposes_core_pipeline_components():
         "mnist.predict",
         "python.custom",
         "multimodal.join",
+        "llm.train_causal",
+        "llm.generate",
+        "text.tfidf_split",
     } <= names
 
 
@@ -341,3 +344,50 @@ def test_mnist_loader_creates_train_and_test_artifacts(tmp_path, artifact_root, 
     assert len(test_labels) == 4
     assert result["metadata"]["dataset"] == "MNIST"
 
+
+
+def test_pipeline_cancellation_is_cooperative(artifact_root):
+    import threading
+
+    source = threading.Event()
+    source.set()
+    graph = pipelines.PipelineGraph(
+        nodes=[{"id": "load", "type": "csv.load", "config": {"path": "unused.csv"}}]
+    )
+    result = pipelines.execute_pipeline(graph, cancel_event=source)
+    assert result["status"] == "cancelled"
+    assert result["nodes"] == []
+
+
+def test_background_pipeline_job_persists_experiment(tmp_path, monkeypatch):
+    import time
+    from services.backend import thinknet_pipeline_jobs as jobs
+
+    monkeypatch.setattr(pipelines, "ARTIFACT_ROOT", tmp_path / "artifacts")
+    monkeypatch.setattr(jobs, "RUN_ROOT", tmp_path / "experiments")
+    source = tmp_path / "input.csv"
+    source.write_text("value\\n1\\n2\\n", encoding="utf-8")
+    graph = pipelines.PipelineGraph(
+        name="background-smoke",
+        nodes=[
+            {"id": "load", "type": "csv.load", "config": {"path": str(source)}},
+            {"id": "inspect", "type": "dataset.inspect"},
+        ],
+        edges=[{"source": "load", "target": "inspect", "source_port": "dataset", "target_port": "dataset"}],
+    )
+    accepted = jobs.start_pipeline_job(jobs.PipelineJobRequest(graph=graph, seed=11))
+    job_id = accepted["job_id"]
+    deadline = time.monotonic() + 10
+    status = "queued"
+    while time.monotonic() < deadline:
+        status = jobs.get_pipeline_job(job_id)["status"]
+        if status in {"completed", "failed", "cancelled"}:
+            break
+        time.sleep(0.05)
+    assert status == "completed"
+    run_id = jobs.get_pipeline_job(job_id)["run_id"]
+    experiment = jobs.get_experiment(run_id)
+    assert experiment["name"] == "background-smoke"
+    assert experiment["seed"] == 11
+    assert experiment["status"] == "completed"
+    assert experiment["outputs"]["inspect"]["report"]["rows"] == 2

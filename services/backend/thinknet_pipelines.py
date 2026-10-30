@@ -123,6 +123,8 @@ def _select_xy(config: dict[str, Any], inputs: dict[str, Any], _context: dict[st
     rows, columns = _read_csv(inputs["dataset"])
     features = config.get("feature_columns")
     target = config.get("target_column")
+    if target is not None and not isinstance(target, str):
+        raise ValueError("target_column must be a column name or null.")
     if not isinstance(features, list) or not features or any(not isinstance(c, str) for c in features):
         raise ValueError("feature_columns must be a non-empty list of column names.")
     if len(features) != len(set(features)):
@@ -192,6 +194,8 @@ def component_catalog() -> list[dict[str, Any]]:
 
 
 def _order(graph: PipelineGraph) -> tuple[list[PipelineNode], dict[str, list[PipelineEdge]]]:
+    if not graph.nodes:
+        raise ValueError("Pipeline must contain at least one component.")
     ids = [node.id for node in graph.nodes]
     if len(ids) != len(set(ids)):
         raise ValueError("Pipeline node IDs must be unique.")

@@ -391,3 +391,31 @@ def test_background_pipeline_job_persists_experiment(tmp_path, monkeypatch):
     assert experiment["seed"] == 11
     assert experiment["status"] == "completed"
     assert experiment["outputs"]["inspect"]["report"]["rows"] == 2
+
+
+def test_causal_llm_pipeline_component_wraps_managed_training(tmp_path, monkeypatch):
+    from services.backend import thinknet_training_jobs as training_jobs
+
+    job_id = "0123456789ab"
+    monkeypatch.setattr(training_jobs, "JOB_ROOT", tmp_path)
+    output = tmp_path / job_id
+    output.mkdir()
+    (output / "manifest.json").write_text(
+        '{"steps_completed": 12, "total_steps": 12, "parameter_count": 2048, '
+        '"token_count": 900, "vocabulary_size": 50257, "device": "cpu"}',
+        encoding="utf-8",
+    )
+    (output / "metrics.jsonl").write_text('{"step": 12, "loss": 2.5}\\n', encoding="utf-8")
+    monkeypatch.setattr(training_jobs, "start_training_job",
+                        lambda _payload: {"job": {"job_id": job_id}})
+    monkeypatch.setattr(training_jobs, "get_training_job",
+                        lambda _job_id: {"status": "completed", "progress": 100, "message": "done"})
+    result = pipelines._llm_train_causal(
+        {"model_graph": {"nodes": [{"id": "placeholder"}]},
+         "training": {"dataset_path": "unused.txt", "max_steps": 12}},
+        {},
+        {},
+    )
+    assert result["model"]["job_id"] == job_id
+    assert result["metrics"]["steps_completed"] == 12
+    assert result["metrics"]["last_metrics"]["loss"] == 2.5

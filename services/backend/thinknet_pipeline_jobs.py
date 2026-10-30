@@ -7,6 +7,7 @@ after a backend restart. Active worker state itself is process-local.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -20,11 +21,12 @@ from pydantic import BaseModel, Field
 from services.backend.thinknet_pipelines import PipelineGraph, execute_pipeline
 
 ROOT = Path(__file__).resolve().parents[2]
-RUN_ROOT = Path(__import__("os").environ.get(
+RUN_ROOT = Path(os.environ.get(
     "THINKNET_EXPERIMENT_DIR", str(ROOT / "training_output" / "experiments")
 )).expanduser().resolve()
 router = APIRouter(prefix="/api/v1/pipelines", tags=["pipeline-jobs"])
-_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="thinknet-pipeline")
+_WORKERS = max(1, min(2, int(os.environ.get("THINKNET_PIPELINE_WORKERS", "1"))))
+_EXECUTOR = ThreadPoolExecutor(max_workers=_WORKERS, thread_name_prefix="thinknet-pipeline")
 _JOBS: dict[str, dict[str, Any]] = {}
 _CANCEL: dict[str, threading.Event] = {}
 _LOCK = threading.RLock()

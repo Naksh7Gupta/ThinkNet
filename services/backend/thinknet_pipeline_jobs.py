@@ -65,6 +65,7 @@ def _execute(job_id: str, graph: PipelineGraph, seed: int, cancel: threading.Eve
             else:
                 nodes[existing] = record
             job.update(nodes=nodes, current_node=record["node_id"],
+                       component_progress=0.0 if record["status"] == "running" else job.get("component_progress", 0.0),
                        progress=round(100 * (sum(1 for item in nodes if item["status"] == "completed") + (0 if record["status"] != "running" else float(job.get("component_progress", 0.0)) / 100)) / max(1, job.get("total_nodes", 1)), 2),
                        message=f"{record['status'].capitalize()}: {record['node_id']}",
                        updated_at=_now())

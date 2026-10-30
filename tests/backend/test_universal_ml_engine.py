@@ -111,3 +111,20 @@ def test_universal_classifier_runs_through_shared_dag(tmp_path, monkeypatch):
     assert result["status"] == "completed", result.get("error")
     assert result["outputs"]["evaluate"]["report"]["accuracy"] >= 0.5
     assert result["outputs"]["predict"]["predictions"]["count"] == 2
+
+
+def test_tfidf_split_fits_vocabulary_on_training_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipelines, "ARTIFACT_ROOT", tmp_path)
+    train = pipelines._write_csv(
+        [{"text": "bright helpful", "label": "positive"},
+         {"text": "awful broken", "label": "negative"}],
+        ["text", "label"],
+    )
+    test = pipelines._write_csv([{"text": "unseenword", "label": "positive"}], ["text", "label"])
+    result = ml._tfidf_split({"text_column": "text"}, {"X_train": train, "X_test": test}, {})
+    train_rows, train_columns = pipelines._read_csv(result["X_train"])
+    test_rows, test_columns = pipelines._read_csv(result["X_test"])
+    assert train_columns == test_columns
+    assert len(train_rows) == 2 and len(test_rows) == 1
+    assert result["metadata"]["fit_scope"] == "training_split_only"
+    assert all(value == "0.0" for value in test_rows[0].values())

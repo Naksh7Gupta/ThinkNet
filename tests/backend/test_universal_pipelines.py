@@ -35,6 +35,12 @@ def test_catalog_exposes_core_pipeline_components():
         "model.train_classifier",
         "model.evaluate_classifier",
         "model.infer",
+        "model.save",
+        "model.load",
+        "mnist.load",
+        "mnist.train",
+        "mnist.evaluate",
+        "mnist.predict",
         "python.custom",
         "multimodal.join",
     } <= names
@@ -224,3 +230,88 @@ def test_multimodal_join_matches_shared_sample_ids(artifact_root):
     assert result["metadata"]["matched_samples"] == 2
     assert rows[0]["text"] == "first"
     assert rows[1]["text"] == "second"
+
+def _mnist_test_graph():
+    return {
+        "name": "mnist-mlp",
+        "nodes": [
+            {"id": "input", "type": "Input", "config": {"shape": [1, 28, 28]}},
+            {"id": "flatten", "type": "Flatten", "config": {"start_dim": 1}},
+            {"id": "hidden", "type": "Linear", "config": {"in_features": 784, "out_features": 32}},
+            {"id": "activation", "type": "ReLU", "config": {}},
+            {"id": "classes", "type": "Linear", "config": {"in_features": 32, "out_features": 10}},
+            {"id": "output", "type": "Output", "config": {}},
+        ],
+        "edges": [
+            {"source": "input", "target": "flatten"},
+            {"source": "flatten", "target": "hidden"},
+            {"source": "hidden", "target": "activation"},
+            {"source": "activation", "target": "classes"},
+            {"source": "classes", "target": "output"},
+        ],
+    }
+
+
+def test_mnist_artifact_round_trip(artifact_root):
+    import torch
+
+    images = torch.randint(0, 256, (12, 1, 28, 28), dtype=torch.uint8)
+    labels = torch.arange(12, dtype=torch.long) % 10
+    ref = pipelines._write_mnist_tensor_dataset(images, labels, "train")
+    loaded_images, loaded_labels = pipelines._read_mnist_tensor_dataset(ref)
+    assert torch.equal(images, loaded_images)
+    assert torch.equal(labels, loaded_labels)
+    assert ref["kind"] == "mnist_tensor_dataset"
+
+
+def test_mnist_pipeline_trains_evaluates_saves_and_reloads(tmp_path, artifact_root, monkeypatch):
+    import torch
+    from services.backend import thinknet_backend_core as core
+
+    monkeypatch.setattr(pipelines, "MODEL_ROOT", tmp_path / "models")
+    train_images = torch.randint(0, 256, (40, 1, 28, 28), dtype=torch.uint8)
+    train_labels = torch.arange(40, dtype=torch.long) % 10
+    test_images = torch.randint(0, 256, (20, 1, 28, 28), dtype=torch.uint8)
+    test_labels = torch.arange(20, dtype=torch.long) % 10
+    train_ref = pipelines._write_mnist_tensor_dataset(train_images, train_labels, "train")
+    test_ref = pipelines._write_mnist_tensor_dataset(test_images, test_labels, "test")
+
+    monkeypatch.setitem(pipelines.COMPONENTS["mnist.load"], "run",
+                        lambda _config, _inputs, _context: {
+                            "train": train_ref, "test": test_ref,
+                            "metadata": {"dataset": "synthetic-mnist", "train_rows": 40, "test_rows": 20},
+                        })
+    graph = pipelines.PipelineGraph(
+        name="mnist-e2e-test",
+        nodes=[
+            {"id": "data", "type": "mnist.load"},
+            {"id": "build", "type": "model.build_graph", "config": {"graph": _mnist_test_graph()}},
+            {"id": "train", "type": "mnist.train", "config": {
+                "epochs": 1, "batch_size": 10, "learning_rate": 0.001, "device": "cpu"}},
+            {"id": "evaluate", "type": "mnist.evaluate"},
+            {"id": "save", "type": "model.save"},
+            {"id": "predict", "type": "mnist.predict", "config": {"limit": 5}},
+        ],
+        edges=[
+            {"source": "build", "target": "train", "source_port": "model", "target_port": "model"},
+            {"source": "data", "target": "train", "source_port": "train", "target_port": "dataset"},
+            {"source": "train", "target": "evaluate", "source_port": "model", "target_port": "model"},
+            {"source": "data", "target": "evaluate", "source_port": "test", "target_port": "dataset"},
+            {"source": "train", "target": "save", "source_port": "model", "target_port": "model"},
+            {"source": "train", "target": "predict", "source_port": "model", "target_port": "model"},
+            {"source": "data", "target": "predict", "source_port": "test", "target_port": "dataset"},
+        ],
+    )
+    result = pipelines.execute_pipeline(graph, seed=11)
+    assert result["status"] == "completed", result.get("error")
+    assert result["outputs"]["train"]["metrics"]["epochs"] == 1
+    assert 0 <= result["outputs"]["evaluate"]["report"]["accuracy"] <= 1
+    assert result["outputs"]["predict"]["predictions"]["count"] == 5
+
+    saved_ref = result["outputs"]["save"]["model"]
+    core.MODEL_STORE.pop(saved_ref["model_id"], None)
+    restored = pipelines._model_load({"checkpoint_id": saved_ref["checkpoint_id"]}, {}, {})
+    restored_model = pipelines._get_model(restored["model"])
+    assert restored_model is not None
+    assert restored["model"]["parameter_count"] > 0
+

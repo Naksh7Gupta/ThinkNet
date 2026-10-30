@@ -362,7 +362,11 @@ export function PipelineWorkspace() {
   const openExperiment = async (runId: string) => {
     try {
       const experiment = await api.getExperiment(runId);
-      setNotice(`Experiment ${experiment.name} · ${experiment.status} · seed ${experiment.seed ?? "—"} · ${experiment.nodes?.length ?? 0} components`);
+      const summaries = Object.entries(experiment.outputs ?? {}).flatMap(([nodeId, outputs]) =>
+        ["metrics", "report"].filter((key) => outputs[key] !== undefined)
+          .map((key) => `${nodeId} ${key}: ${JSON.stringify(outputs[key])}`),
+      );
+      setNotice(`Experiment ${experiment.name} · ${experiment.status} · seed ${experiment.seed ?? "—"} · ${summaries.join(" | ").slice(0, 240)}`);
       setError(experiment.error ?? "");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load experiment.");

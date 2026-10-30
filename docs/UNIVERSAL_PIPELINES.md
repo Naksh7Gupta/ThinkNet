@@ -101,6 +101,48 @@ Persistent projects are stored locally below `projects/pipelines` by default. Co
 
 The image/audio nodes currently index files and labels; they do not yet decode, augment, batch, or train neural vision/audio models. Text ingestion currently creates document records; tokenizer, embedding, language-model training, and text evaluation adapters are still follow-up work. The multimodal join aligns records by sample ID but does not itself fuse neural embeddings. Model handles currently live in backend memory during a run; durable model registry/checkpoint lifecycle is still future work. Remote GPU execution is intentionally out of scope for this PR. Robotics and ROS 2 work is explicitly deferred; this branch will not expand those adapters.
 
+
+## First complete example: MNIST classification
+
+The Pipeline Builder now includes an **MNIST starter** that creates a real executable graph:
+
+\`\`\`text
+MNIST loader ──────────────┬── train images ──┐
+                          └── test images ─┬─┼── evaluate
+Model graph → MLP → train ────────────────┘ ├── save checkpoint
+                                            └── predict samples
+\`\`\`
+
+The starter defines a small image MLP using the existing architecture graph compiler:
+
+- Input: \`[1, 28, 28]\`
+- Flatten: \`1 × 28 × 28 → 784\`
+- Linear: \`784 → 128\`
+- ReLU
+- Linear: \`128 → 10\`
+- Output: ten class logits
+
+### MNIST components
+
+- \`mnist.load\`: loads the official MNIST train/test splits through torchvision. Defaults to downloading into \`datasets/mnist\`; \`root\`, \`download\`, \`train_limit\`, and \`test_limit\` can be set in its config. It stores compact uint8 tensor artifacts in the ThinkNet artifact store.
+- \`mnist.train\`: minibatch AdamW + cross-entropy training. Config: \`epochs\` (default 3), \`batch_size\` (128), \`learning_rate\` (0.001), and \`device\` (\`auto\`, \`cpu\`, or \`cuda\`). \`auto\` uses CUDA when available and CPU otherwise.
+- \`mnist.evaluate\`: computes held-out loss, overall accuracy, and per-class accuracy.
+- \`mnist.predict\`: returns up to 1,000 prediction rows with predicted digit, true digit, and confidence; default limit is 20.
+- \`model.save\`: saves the architecture graph and PyTorch state dict under \`training_output/pipeline_models\` (configurable with \`THINKNET_PIPELINE_MODEL_DIR\`). Its output includes a \`checkpoint_id\`.
+- \`model.load\`: restores a saved model using \`{"checkpoint_id": "<id>" }\` in the node config. This works after restarting the backend because the checkpoint is stored on disk.
+
+Install the backend requirements, including torchvision, before running the starter. The first run downloads MNIST and therefore needs an internet connection. The dataset and checkpoint remain local after download/save.
+
+### Reproducible starter workflow
+
+1. Open Pipeline Builder and select **MNIST starter**.
+2. Inspect the model graph inside the \`model.build_graph\` node configuration, or edit its layers.
+3. Adjust epochs/batch size/device in the \`mnist.train\` node if needed.
+4. Run the pipeline. The run summary reports test accuracy and the saved checkpoint ID.
+5. Save the pipeline project. Keep the checkpoint ID from the run record to restore the model later with a \`model.load\` node and connect it to \`mnist.predict\`.
+
+The end-to-end automated test uses a synthetic in-memory MNIST-shaped dataset so it does not download files or rely on network access. It covers DAG execution, training, evaluation, prediction, checkpoint persistence, and reload. The actual official-dataset download should still be verified in a local desktop run.
+
 ## Full-project completion target
 
 The intended project is one coherent pipeline system, with shared artifacts and execution semantics across these stages:
@@ -114,7 +156,7 @@ The intended project is one coherent pipeline system, with shared artifacts and 
 7. **Inference:** invoke saved models on new inputs through a reusable inference interface and inspect outputs.
 8. **Reliability:** cancellation, failure recovery, resource monitoring, clear errors, run manifests, and automated tests for complete example projects.
 
-These are completion goals, not claims that every stage is implemented today. The current branch is an initial executable foundation: DAG execution, local artifact references, basic data operations, a visual editor, project save/open, and a limited numeric-tabular classifier path. The model workflow is not yet a general-purpose trainer; image/audio/text model training, durable model registry, complete experiment management, and robust task-specific preprocessing remain unfinished. The existing architecture compiler and causal-language-model training API are separate paths and are not falsely labelled as universal.
+These are completion goals, not claims that every stage is implemented today. The current branch now includes a complete first image-classification vertical slice for MNIST, in addition to DAG execution, local artifact references, basic data operations, a visual editor, and project save/open. This is not yet a general-purpose trainer; image/audio/text model training, durable model registry, complete experiment management, and robust task-specific preprocessing remain unfinished. The existing architecture compiler and causal-language-model training API are separate paths and are not falsely labelled as universal.
 
 **Priority rule:** finish and verify the end-to-end ML pipeline lifecycle before expanding into robotics, ROS 2, simulation, or hardware integrations.
 

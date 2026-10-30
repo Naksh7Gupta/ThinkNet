@@ -909,6 +909,126 @@ COMPONENTS.update({
 })
 
 
+def _llm_train_causal(config: dict[str, Any], _inputs: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    """Run the existing managed causal-LM trainer as a pipeline component."""
+    import time
+    from services.backend.thinknet_training import TrainingSettings
+    from services.backend.thinknet_training_jobs import (
+        JOB_ROOT, TrainingJobRequest, start_training_job, get_training_job, cancel_training_job,
+    )
+
+    graph = config.get("model_graph")
+    settings_payload = config.get("training", {})
+    if not isinstance(graph, dict) or not graph.get("nodes"):
+        raise ValueError("Configure model_graph with a valid ThinkNet causal language-model graph.")
+    if not isinstance(settings_payload, dict):
+        raise ValueError("training configuration must be an object.")
+    settings = TrainingSettings.model_validate(settings_payload)
+    started = start_training_job(TrainingJobRequest(graph=graph, training=settings))
+    job_id = started["job"]["job_id"]
+    deadline = time.monotonic() + float(config.get("max_wait_seconds", 86400))
+    while time.monotonic() < deadline:
+        cancel_event = context.get("cancel_event")
+        if cancel_event is not None and cancel_event.is_set():
+            cancel_training_job(job_id)
+            raise ValueError(f"Pipeline cancelled; causal-LM training job {job_id} was asked to stop.")
+        job = get_training_job(job_id)
+        if job["status"] in {"completed", "failed", "cancelled"}:
+            if job["status"] != "completed":
+                raise ValueError(f"Causal-LM job {job_id} {job['status']}: {job.get('error') or job.get('message')}")
+            output = JOB_ROOT / job_id
+            manifest_path = output / "manifest.json"
+            if not manifest_path.is_file():
+                raise ValueError("Causal-LM job completed without a training manifest.")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            metrics_path = output / "metrics.jsonl"
+            metrics = []
+            if metrics_path.is_file():
+                for line in metrics_path.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        metrics.append(json.loads(line))
+            return {
+                "model": {"kind": "llm_model_ref", "job_id": job_id,
+                          "task": "causal_language_modeling", "artifact_dir": str(output)},
+                "metrics": {"task": "causal_language_modeling", "job_id": job_id,
+                            "steps_completed": manifest.get("steps_completed"),
+                            "total_steps": manifest.get("total_steps"),
+                            "parameter_count": manifest.get("parameter_count"),
+                            "token_count": manifest.get("token_count"),
+                            "vocabulary_size": manifest.get("vocabulary_size"),
+                            "device": manifest.get("device"),
+                            "last_metrics": metrics[-1] if metrics else None,
+                            "artifact_available": True},
+            }
+        time.sleep(0.5)
+    cancel_training_job(job_id)
+    raise ValueError(f"Causal-LM training job {job_id} exceeded max_wait_seconds and was cancelled.")
+
+
+def _llm_generate(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import re
+    import torch
+    from transformers import AutoTokenizer
+    from services.backend.thinknet_backend_core import CompiledGraph, GraphDef
+    from services.backend.thinknet_training_jobs import JOB_ROOT
+
+    model_ref = inputs["model"]
+    job_id = str(model_ref.get("job_id", ""))
+    if not re.fullmatch(r"[0-9a-f]{12}", job_id):
+        raise ValueError("Invalid causal-LM model reference.")
+    output = JOB_ROOT / job_id
+    if not (output / "manifest.json").is_file():
+        raise ValueError("Causal-LM training artifacts are missing.")
+    graph_payload = json.loads((output / "graph.json").read_text(encoding="utf-8"))
+    training = json.loads((output / "training.json").read_text(encoding="utf-8"))
+    tokenizer = AutoTokenizer.from_pretrained(str(output / "tokenizer"), local_files_only=True)
+    graph = GraphDef.model_validate(graph_payload)
+    model = CompiledGraph(graph)
+    state = torch.load(output / "model_state_dict.pt", map_location="cpu", weights_only=True)
+    model.load_state_dict(state, strict=True)
+    model.eval()
+    prompt = str(config.get("prompt", ""))
+    if not prompt.strip():
+        raise ValueError("Enter a non-empty prompt in the LLM Generate node.")
+    max_new_tokens = int(config.get("max_new_tokens", 40))
+    if not 1 <= max_new_tokens <= 256:
+        raise ValueError("max_new_tokens must be between 1 and 256.")
+    temperature = float(config.get("temperature", 1.0))
+    if not 0 < temperature <= 2:
+        raise ValueError("temperature must be in (0, 2].")
+    sequence_length = int(training["sequence_length"])
+    token_ids = tokenizer.encode(prompt, return_tensors="pt")
+    if token_ids.shape[1] == 0:
+        raise ValueError("Prompt did not produce any tokens.")
+    generated = token_ids
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    generated = generated.to(device)
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            context_ids = generated[:, -sequence_length:]
+            logits = model(context_ids)
+            if isinstance(logits, (tuple, list)):
+                logits = logits[0]
+            next_logits = logits[:, -1, :] / temperature
+            next_token = torch.argmax(next_logits, dim=-1, keepdim=True)
+            generated = torch.cat((generated, next_token), dim=1)
+            if tokenizer.eos_token_id is not None and int(next_token.item()) == tokenizer.eos_token_id:
+                break
+    text = tokenizer.decode(generated[0].detach().cpu().tolist(), skip_special_tokens=True)
+    return {"predictions": {"text": text, "prompt": prompt,
+                            "new_tokens": int(generated.shape[1] - token_ids.shape[1]),
+                            "model_job_id": job_id}}
+
+
+COMPONENTS.update({
+    "llm.train_causal": {"inputs": {}, "outputs": {"model": "llm_model_ref", "metrics": "metadata"},
+                         "run": _llm_train_causal},
+    "llm.generate": {"inputs": {"model": "llm_model_ref"}, "outputs": {"predictions": "metadata"},
+                     "run": _llm_generate},
+})
+
+
 def _multimodal_join(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
     left_rows, left_columns = _read_csv(inputs["left"])
     right_rows, right_columns = _read_csv(inputs["right"])

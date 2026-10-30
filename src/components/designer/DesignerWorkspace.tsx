@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import { MODEL_LOADER_CATALOG } from "@/lib/graph";
 import { ProjectPanel } from "@/components/designer/ProjectPanel";
 import { ToolRail } from "@/components/designer/ToolRail";
+import { PipelineWorkspace } from "@/components/pipeline/PipelineWorkspace";
 
 export function DesignerWorkspace() {
   const searchRef = useRef<HTMLInputElement>(null);
@@ -21,6 +22,7 @@ export function DesignerWorkspace() {
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [estimatorOpen, setEstimatorOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [canvasMode, setCanvasMode] = useState<"architecture" | "pipeline">("architecture");
   const catalog = useQuery({ queryKey: ["nodes"], queryFn: api.listNodes });
   const architectures = useQuery({ queryKey: ["architectures"], queryFn: api.listArchitectures });
   const nodes = useMemo(() => catalog.data?.nodes ?? [], [catalog.data?.nodes]);
@@ -53,7 +55,12 @@ export function DesignerWorkspace() {
 
   return (
     <ReactFlowProvider>
-      <div className="flex min-h-0 flex-1">
+      <div className="flex h-full min-h-0 flex-1 flex-col">
+        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card px-3">
+          <button type="button" onClick={() => setCanvasMode("architecture")} aria-pressed={canvasMode === "architecture"} className={"rounded-md px-3 py-1 text-xs font-medium " + (canvasMode === "architecture" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>Architecture Designer</button>
+          <button type="button" onClick={() => setCanvasMode("pipeline")} aria-pressed={canvasMode === "pipeline"} className={"rounded-md px-3 py-1 text-xs font-medium " + (canvasMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>Pipeline Builder</button>
+        </div>
+        {canvasMode === "pipeline" ? <PipelineWorkspace /> : <div className="flex min-h-0 flex-1">
         <ToolRail
           libraryOpen={libraryOpen}
           onToggleLibrary={() => {
@@ -141,6 +148,7 @@ export function DesignerWorkspace() {
             <ModelOperations />
           </aside>
         )}
+        </div>}
       </div>
     </ReactFlowProvider>
   );

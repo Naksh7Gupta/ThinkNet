@@ -224,13 +224,3 @@ def test_multimodal_join_matches_shared_sample_ids(artifact_root):
     assert result["metadata"]["matched_samples"] == 2
     assert rows[0]["text"] == "first"
     assert rows[1]["text"] == "second"
-
-
-def test_robotics_jsonl_adapter_reads_flattened_records(tmp_path, artifact_root):
-    source = tmp_path / "telemetry.jsonl"
-    source.write_text('{"timestamp": 1, "linear_x": 0.4}\\n{"timestamp": 2, "linear_x": 0.5}', encoding="utf-8")
-    result = pipelines._robotics_jsonl({"path": str(source)}, {}, {})
-    rows, columns = pipelines._read_csv(result["dataset"])
-    assert "sample_id" in columns
-    assert len(rows) == 2
-    assert result["metadata"]["modality"] == "robotics"

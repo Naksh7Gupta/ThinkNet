@@ -366,7 +366,7 @@ def test_background_pipeline_job_persists_experiment(tmp_path, monkeypatch):
     monkeypatch.setattr(pipelines, "ARTIFACT_ROOT", tmp_path / "artifacts")
     monkeypatch.setattr(jobs, "RUN_ROOT", tmp_path / "experiments")
     source = tmp_path / "input.csv"
-    source.write_text("value\\n1\\n2\\n", encoding="utf-8")
+    source.write_text("value\n1\n2\n", encoding="utf-8")
     graph = pipelines.PipelineGraph(
         name="background-smoke",
         nodes=[

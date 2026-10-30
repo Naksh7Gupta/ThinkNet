@@ -65,6 +65,7 @@ def _execute(job_id: str, graph: PipelineGraph, seed: int, cancel: threading.Eve
             else:
                 nodes[existing] = record
             job.update(nodes=nodes, current_node=record["node_id"],
+                       progress=round(100 * sum(1 for item in nodes if item["status"] == "completed") / max(1, job.get("total_nodes", 1)), 2),
                        message=f"{record['status'].capitalize()}: {record['node_id']}",
                        updated_at=_now())
     try:
@@ -112,7 +113,7 @@ def start_pipeline_job(payload: PipelineJobRequest):
     cancel = threading.Event()
     job = {"job_id": job_id, "status": "queued", "progress": 0.0, "nodes": [],
            "current_node": None, "message": "Queued for local execution.",
-           "created_at": _now(), "updated_at": _now(), "seed": payload.seed}
+           "created_at": _now(), "updated_at": _now(), "seed": payload.seed, "total_nodes": len(payload.graph.nodes)}
     with _LOCK:
         _JOBS[job_id] = job
         _CANCEL[job_id] = cancel

@@ -75,10 +75,10 @@ def test_universal_classifier_runs_through_shared_dag(tmp_path, monkeypatch):
     ml.ML_MODELS.clear()
     source = tmp_path / "classification.csv"
     source.write_text(
-        "length,width,label\\n"
-        "1,1,small\\n2,1,small\\n1,2,small\\n"
-        "8,8,large\\n9,8,large\\n8,9,large\\n"
-        "2,2,small\\n9,9,large\\n",
+        "length,width,label\n"
+        "1,1,small\n2,1,small\n1,2,small\n"
+        "8,8,large\n9,8,large\n8,9,large\n"
+        "2,2,small\n9,9,large\n",
         encoding="utf-8",
     )
     graph = pipelines.PipelineGraph(

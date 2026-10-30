@@ -12,7 +12,7 @@ import {
   type Node,
 } from "@xyflow/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Save, ShieldCheck, Plus, FolderOpen } from "lucide-react";
+import { Play, Save, ShieldCheck, Plus, FolderOpen, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,64 @@ export function PipelineWorkspace() {
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
 
+  const loadMnistStarter = () => {
+    const modelGraph = {
+      name: "mnist-mlp",
+      nodes: [
+        { id: "input", type: "Input", config: { shape: [1, 28, 28] } },
+        { id: "flatten", type: "Flatten", config: { start_dim: 1 } },
+        { id: "hidden", type: "Linear", config: { in_features: 784, out_features: 128 } },
+        { id: "activation", type: "ReLU", config: {} },
+        { id: "classes", type: "Linear", config: { in_features: 128, out_features: 10 } },
+        { id: "output", type: "Output", config: {} },
+      ],
+      edges: [
+        { source: "input", target: "flatten", source_port: "output", target_port: "input" },
+        { source: "flatten", target: "hidden", source_port: "output", target_port: "input" },
+        { source: "hidden", target: "activation", source_port: "output", target_port: "input" },
+        { source: "activation", target: "classes", source_port: "output", target_port: "input" },
+        { source: "classes", target: "output", source_port: "output", target_port: "input" },
+      ],
+    };
+    const definitions = [
+      { id: "mnist_data", type: "mnist.load", config: {}, inputPort: "input", outputPort: "train" },
+      { id: "mnist_model", type: "model.build_graph", config: { graph: modelGraph }, inputPort: "input", outputPort: "model" },
+      { id: "mnist_train", type: "mnist.train", config: { epochs: 3, batch_size: 128, learning_rate: 0.001, device: "auto" }, inputPort: "model", outputPort: "model" },
+      { id: "mnist_evaluate", type: "mnist.evaluate", config: {}, inputPort: "model", outputPort: "report" },
+      { id: "mnist_save", type: "model.save", config: {}, inputPort: "model", outputPort: "model" },
+      { id: "mnist_predict", type: "mnist.predict", config: { limit: 20 }, inputPort: "model", outputPort: "predictions" },
+    ];
+    const positions = [
+      { x: 80, y: 180 }, { x: 360, y: 60 }, { x: 650, y: 180 },
+      { x: 960, y: 60 }, { x: 960, y: 300 }, { x: 1260, y: 180 },
+    ];
+    setNodes(definitions.map((item, index) => ({
+      id: item.id,
+      type: "default",
+      position: positions[index],
+      data: { label: item.type, type: item.type, config: item.config,
+        inputPort: item.inputPort, outputPort: item.outputPort },
+    })));
+    const connections = [
+      ["mnist_model", "mnist_train", "model", "model"],
+      ["mnist_data", "mnist_train", "train", "dataset"],
+      ["mnist_train", "mnist_evaluate", "model", "model"],
+      ["mnist_data", "mnist_evaluate", "test", "dataset"],
+      ["mnist_train", "mnist_save", "model", "model"],
+      ["mnist_save", "mnist_predict", "model", "model"],
+      ["mnist_data", "mnist_predict", "test", "dataset"],
+    ] as const;
+    setEdges(connections.map(([source, target, sourcePort, targetPort], index) => ({
+      id: `mnist-edge-${index}`, source, target, sourceHandle: null, targetHandle: null,
+      type: "smoothstep", data: { sourcePort, targetPort },
+    })));
+    setName("MNIST Image Classification");
+    setProjectId("mnist-image-classification");
+    setSelectedId(null);
+    setError("");
+    setNotice("MNIST starter loaded. Configure the dataset path if needed, then run the pipeline.");
+  };
+
   const addNode = (type: string) => {
     const item = catalog.data?.components.find((component) => component.type === type);
     if (!item) return;
@@ -120,7 +178,18 @@ export function PipelineWorkspace() {
     mutationFn: () => api.runPipeline(graph),
     onSuccess: (result) => {
       setError(result.status === "failed" ? result.error ?? "Pipeline failed." : "");
-      setNotice(result.status === "completed" ? `Run ${result.run_id} completed. Run record: ${result.run_record ?? "saved"}` : "");
+      if (result.status === "completed") {
+        const metrics = result.outputs?.mnist_train?.metrics as { training_accuracy?: number; training_loss?: number } | undefined;
+        const report = result.outputs?.mnist_evaluate?.report as { accuracy?: number; loss?: number } | undefined;
+        const saved = result.outputs?.mnist_save?.model as { checkpoint_id?: string } | undefined;
+        const summary = report?.accuracy !== undefined
+          ? ` · test accuracy ${(report.accuracy * 100).toFixed(1)}%`
+          : metrics?.training_accuracy !== undefined
+            ? ` · training accuracy ${(metrics.training_accuracy * 100).toFixed(1)}%` : "";
+        setNotice(`Run ${result.run_id} completed${summary}. ${saved?.checkpoint_id ? `Saved model ID: ${saved.checkpoint_id}` : `Run record: ${result.run_record ?? "saved"}`}`);
+      } else {
+        setNotice("");
+      }
     },
     onError: (reason) => setError(reason instanceof Error ? reason.message : "Pipeline run failed."),
   });
@@ -208,6 +277,7 @@ export function PipelineWorkspace() {
           <option value="">Open project…</option>
           {(projects.data?.projects ?? []).map((project) => <option key={project.project_id} value={project.project_id}>{project.name}</option>)}
         </select>
+        <Button variant="secondary" onClick={loadMnistStarter}><Sparkles className="h-4 w-4" /> MNIST starter</Button>
         <Button variant="secondary" onClick={() => save.mutate()} disabled={save.isPending}><Save className="h-4 w-4" /> Save</Button>
         <Button variant="secondary" onClick={() => validate.mutate()} disabled={validate.isPending}><ShieldCheck className="h-4 w-4" /> Validate</Button>
         <Button onClick={() => run.mutate()} disabled={run.isPending || nodes.length === 0}><Play className="h-4 w-4" /> Run pipeline</Button>

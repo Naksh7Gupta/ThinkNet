@@ -184,62 +184,41 @@ the adapters interpret task configuration and select an appropriate estimator.
 
 ### Registered components
 
-- `text.tfidf`: converts a text column into numeric TF-IDF features. Configure
-  `text_column`, `label_column`, and `max_features`. It preserves the label
-  column when present.
-- `ml.fit`: fits a scikit-learn classification, regression, or clustering estimator.
-- `torch.fit`, `torch.evaluate`, and `torch.predict`: train and evaluate a user-built ThinkNet/PyTorch graph for numeric tabular classification or regression, with minibatches, AdamW/SGD, cancellation checks, progress callbacks and task-aware metrics. The graph output width must equal the number of classes for classification, or one for regression. `model.save` preserves task labels and feature-column metadata.
-  Connect feature data to `X`; connect one-column targets to optional `Y`
-  for classification/regression. Supported estimator choices:
+- `text.tfidf`: converts a complete text dataset into numeric TF-IDF features. This convenience component fits on all rows; for a held-out evaluation workflow, prefer `text.tfidf_split`.
+- `text.tfidf_split`: accepts paired `X_train` and `X_test` text artifacts, fits its vocabulary on training text only, then transforms test text with the same vocabulary.
+- `ml.fit`, `ml.evaluate`, and `ml.predict`: scikit-learn adapters for classification, regression and clustering. Supported estimators:
   - classification: `logistic_regression`, `random_forest`
   - regression: `linear_regression`, `random_forest`
   - clustering: `kmeans` (configure `clusters`)
-- `ml.evaluate`: evaluates a fitted model. Classification reports accuracy
-  and weighted F1; regression reports MAE, RMSE and R²; clustering reports
-  cluster count and silhouette score when defined.
-- `ml.predict`: runs inference on a feature dataset with the same columns and
-  column order used during fitting.
+- `torch.fit`, `torch.evaluate`, and `torch.predict`: train and evaluate a user-built ThinkNet/PyTorch graph for numeric tabular classification or regression. Supports minibatches, AdamW/SGD, cancellation checks, progress callbacks and task-aware metrics. Connect a model from `model.build_graph`, feature artifacts to `X`, and a one-column target artifact to `Y`. The graph output width must equal the number of classes for classification, or one for regression.
+- `model.save` preserves PyTorch task labels and feature-column metadata; `model.load` restores them.
 
 ### Example: sentiment classification
 
 ```text
-text.load
+csv.load (CSV has text and label columns)
    ↓
-text.tfidf
-   ↓
-dataset.select_xy
+dataset.select_xy (feature_columns=["text"], target_column="label")
    ↓
 dataset.split_xy
-   ├── X_train + Y_train → ml.fit
-   └── X_test + Y_test ─────────→ ml.evaluate ← fitted model
-                                  fitted model + X_test → ml.predict
+   ├── X_train + X_test → text.tfidf_split
+   ├── X_train features + Y_train → ml.fit
+   └── X_test features + Y_test → ml.evaluate ← fitted model
+                                 fitted model + X_test → ml.predict
 ```
 
-Configure `dataset.select_xy` with TF-IDF feature columns and `label` as the
-target. Configure `ml.fit` with `{"task":"classification",
-"estimator":"logistic_regression"}`. For a valid held-out evaluation, connect
-the test split—not the training split—to `ml.evaluate`.
+The actual canvas wires the split's `X_train` and `X_test` through `text.tfidf_split`, then sends the resulting feature artifacts to `ml.fit`, `ml.evaluate`, and `ml.predict`. This prevents the test split from influencing the fitted TF-IDF vocabulary.
 
 ### Boundaries of this first adapter layer
 
-- TF-IDF is a sparse-text baseline converted to a bounded dense feature table;
-  it is suitable for small/medium experiments, not huge corpora.
-- Estimator model handles are currently process-local. They expire when the
-  backend restarts; durable serialization and a unified model registry are
-  follow-up work. These adapters do not use the PyTorch `model.save` component.
-- Numeric tabular features are required by these estimator adapters. Categorical
-  encoding, missing-value strategies, cross-validation, and richer text
-  preprocessing are future reusable components.
-- The adapter layer demonstrates shared task infrastructure, not universal
-  support for every modality or algorithm. MNIST remains on the PyTorch path;
-  arbitrary vision/audio training and LLM fine-tuning are not implemented here.
-- Scikit-learn is an additional backend dependency.
+- TF-IDF is a bounded dense-feature baseline for small/medium experiments, not huge corpora.
+- Scikit-learn model handles are process-local and expire when the backend restarts; durable sklearn serialization and a unified model registry remain follow-up work. These adapters do not use the PyTorch `model.save` component.
+- PyTorch supervised adapters currently expect numeric feature columns. Categorical encoding, missing-value strategies, cross-validation and richer preprocessing remain future reusable components.
+- Generic image/audio folder components still index file metadata; arbitrary image/audio neural training is not implemented yet. MNIST is the current complete vision example.
+- Causal language-model pretraining is integrated through the managed LLM trainer. Instruction fine-tuning, SFT, LoRA/QLoRA, preference optimization, distributed training and remote GPU provisioning are not included in this milestone.
+- Scikit-learn is an additional backend dependency; PyTorch and Transformers use the existing backend environment.
 
-This is an incremental universal foundation: DAG execution, artifact contracts,
-and project workflow are shared, while task-specific adapters select their
-own estimators and metrics. It deliberately does not claim that all tasks use
-the same model or training algorithm.
-
+This is an incremental universal foundation: DAG execution, artifact contracts, background jobs and experiment records are shared, while specialized components select the appropriate library, model family, training loop and metrics. It does not force every AI task into one algorithm.
 
 ## Universal task adapters, LLM training, jobs and experiments
 
@@ -277,8 +256,8 @@ For text classification, use `text.tfidf_split` after the paired train/test spli
 
 The Pipeline Builder now offers templates for:
 - Sentiment / spam classification: CSV text+label → paired split → train-only TF-IDF → logistic regression → evaluation and prediction.
-- Tabular classification: CSV → X/Y → split → logistic regression → evaluation and prediction.
-- Regression: CSV → X/Y → split → linear regression → MAE/RMSE/R² and prediction.
+- Tabular classification: scikit-learn logistic regression or a custom PyTorch MLP → evaluation and prediction.
+- Regression: scikit-learn linear regression or a custom PyTorch MLP → MAE/RMSE/R² and prediction.
 - Clustering: CSV → feature selection → K-means → cluster evaluation.
 - Causal LLM training: a small decoder-only transformer graph → tokenizer/text training → generation.
 - MNIST image classification remains available as its own starter.

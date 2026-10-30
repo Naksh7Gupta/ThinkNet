@@ -1,7 +1,6 @@
-"""Small, local-first DAG runner for reusable data preparation components.
+"""Local-first DAG runner for end-to-end machine-learning projects.
 
-The runner deliberately uses artifact references between components. It is not a
-replacement for the existing PyTorch architecture compiler or managed trainer.
+Large datasets and models move between nodes as ThinkNet-managed artifact references.
 """
 from __future__ import annotations
 
@@ -609,6 +608,248 @@ def _model_infer(config: dict[str, Any], inputs: dict[str, Any], _context: dict[
     return {"predictions": {"values": output.detach().cpu().tolist()}}
 
 
+
+# MNIST is the first complete image-classification vertical slice. The dataset is
+# stored as compact uint8 tensors; image decoding and batching happen in the trainer.
+MODEL_ROOT = Path(os.environ.get(
+    "THINKNET_PIPELINE_MODEL_DIR", str(ROOT / "training_output" / "pipeline_models")
+)).expanduser().resolve()
+
+
+def _tensor_artifact_path(artifact_id: str) -> Path:
+    if not artifact_id or any(ch not in "0123456789abcdef" for ch in artifact_id):
+        raise ValueError("Invalid tensor dataset artifact reference.")
+    return ARTIFACT_ROOT / f"{artifact_id}.pt"
+
+
+def _write_mnist_tensor_dataset(images, labels, split: str) -> dict[str, Any]:
+    import torch
+    if images.ndim != 4 or tuple(images.shape[1:]) != (1, 28, 28):
+        raise ValueError("MNIST images must have shape [rows, 1, 28, 28].")
+    if labels.ndim != 1 or len(images) != len(labels) or len(images) == 0:
+        raise ValueError("MNIST labels must be a non-empty vector aligned with images.")
+    artifact_id = uuid.uuid4().hex
+    path = _tensor_artifact_path(artifact_id)
+    ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
+    torch.save({"images": images.detach().cpu().to(torch.uint8),
+                "labels": labels.detach().cpu().to(torch.long)}, path)
+    return {"kind": "mnist_tensor_dataset", "artifact_id": artifact_id,
+            "rows": int(len(labels)), "split": split}
+
+
+def _read_mnist_tensor_dataset(ref: dict[str, Any]):
+    import torch
+    if not isinstance(ref, dict) or ref.get("kind") != "mnist_tensor_dataset":
+        raise ValueError("Expected a ThinkNet MNIST tensor dataset reference.")
+    path = _tensor_artifact_path(str(ref.get("artifact_id", "")))
+    if not path.is_file():
+        raise ValueError("MNIST dataset artifact is missing; run the MNIST loader again.")
+    data = torch.load(path, map_location="cpu", weights_only=True)
+    images, labels = data.get("images"), data.get("labels")
+    if not isinstance(images, torch.Tensor) or not isinstance(labels, torch.Tensor):
+        raise ValueError("MNIST artifact is invalid.")
+    if images.ndim != 4 or tuple(images.shape[1:]) != (1, 28, 28) or labels.ndim != 1 or len(images) != len(labels):
+        raise ValueError("MNIST artifact has invalid tensor shapes.")
+    return images, labels
+
+
+def _mnist_load(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from torchvision.datasets import MNIST
+    except Exception as exc:
+        raise ValueError("MNIST requires torchvision. Install the backend requirements and restart ThinkNet.") from exc
+    root = Path(str(config.get("root", ROOT / "datasets" / "mnist"))).expanduser()
+    download = bool(config.get("download", True))
+    try:
+        train = MNIST(root=str(root), train=True, download=download)
+        test = MNIST(root=str(root), train=False, download=download)
+    except Exception as exc:
+        raise ValueError(f"Could not load MNIST at '{root}': {exc}") from exc
+    train_limit = config.get("train_limit")
+    test_limit = config.get("test_limit")
+    if train_limit is not None:
+        train_limit = int(train_limit)
+        if train_limit < 1:
+            raise ValueError("train_limit must be a positive integer.")
+    if test_limit is not None:
+        test_limit = int(test_limit)
+        if test_limit < 1:
+            raise ValueError("test_limit must be a positive integer.")
+    train_images, train_labels = train.data, train.targets
+    test_images, test_labels = test.data, test.targets
+    if train_limit:
+        train_images, train_labels = train_images[:train_limit], train_labels[:train_limit]
+    if test_limit:
+        test_images, test_labels = test_images[:test_limit], test_labels[:test_limit]
+    train_ref = _write_mnist_tensor_dataset(train_images.unsqueeze(1), train_labels, "train")
+    test_ref = _write_mnist_tensor_dataset(test_images.unsqueeze(1), test_labels, "test")
+    return {"train": train_ref, "test": test_ref,
+            "metadata": {"dataset": "MNIST", "train_rows": len(train_labels),
+                         "test_rows": len(test_labels), "image_shape": [1, 28, 28],
+                         "classes": list(range(10)), "root": str(root.resolve())}}
+
+
+def _resolve_device(value: Any):
+    import torch
+    requested = str(value or "auto").lower()
+    if requested == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if requested == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA was requested but is not available in this backend environment.")
+    if requested not in {"cpu", "cuda"}:
+        raise ValueError("device must be 'auto', 'cpu', or 'cuda'.")
+    return torch.device(requested)
+
+
+def _mnist_train(config: dict[str, Any], inputs: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    import torch.nn.functional as F
+    from torch.utils.data import DataLoader, TensorDataset
+    model_ref = inputs["model"]
+    model = _get_model(model_ref)
+    images, labels = _read_mnist_tensor_dataset(inputs["dataset"])
+    epochs = int(config.get("epochs", 3))
+    batch_size = int(config.get("batch_size", 128))
+    learning_rate = float(config.get("learning_rate", 1e-3))
+    if not 1 <= epochs <= 100 or not 1 <= batch_size <= 4096 or not 0 < learning_rate <= 1:
+        raise ValueError("Use epochs 1–100, batch_size 1–4096, and learning_rate in (0, 1].")
+    device = _resolve_device(config.get("device", "auto"))
+    generator = torch.Generator().manual_seed(int(context["seed"]))
+    loader = DataLoader(TensorDataset(images, labels), batch_size=batch_size,
+                        shuffle=True, generator=generator, num_workers=0)
+    model.to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    history = []
+    for epoch in range(epochs):
+        model.train()
+        total_loss, correct, seen = 0.0, 0, 0
+        for batch_images, batch_labels in loader:
+            batch_images = batch_images.to(device=device, dtype=torch.float32).div_(255.0)
+            batch_labels = batch_labels.to(device=device)
+            optimizer.zero_grad(set_to_none=True)
+            logits = model(batch_images)
+            if isinstance(logits, tuple):
+                logits = logits[0]
+            if logits.ndim != 2 or logits.shape != (len(batch_labels), 10):
+                raise ValueError("MNIST model output must have shape [batch, 10]. Check the final model layer.")
+            loss = F.cross_entropy(logits, batch_labels)
+            loss.backward()
+            optimizer.step()
+            total_loss += float(loss.detach()) * len(batch_labels)
+            correct += int((logits.argmax(dim=1) == batch_labels).sum())
+            seen += len(batch_labels)
+        history.append({"epoch": epoch + 1, "loss": total_loss / seen, "accuracy": correct / seen})
+    model.to("cpu").eval()
+    return {"model": model_ref, "metrics": {"dataset": "MNIST", "epochs": epochs,
+            "samples": len(labels), "training_loss": history[-1]["loss"],
+            "training_accuracy": history[-1]["accuracy"], "history": history,
+            "device": str(device), "classes": list(range(10))}}
+
+
+def _mnist_evaluate(_config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    import torch.nn.functional as F
+    from torch.utils.data import DataLoader, TensorDataset
+    model = _get_model(inputs["model"]).eval()
+    images, labels = _read_mnist_tensor_dataset(inputs["dataset"])
+    device = _resolve_device("auto")
+    model.to(device)
+    loader = DataLoader(TensorDataset(images, labels), batch_size=512, shuffle=False, num_workers=0)
+    total_loss, correct, seen = 0.0, 0, 0
+    class_correct, class_total = [0] * 10, [0] * 10
+    with torch.no_grad():
+        for batch_images, batch_labels in loader:
+            x = batch_images.to(device=device, dtype=torch.float32).div_(255.0)
+            y = batch_labels.to(device=device)
+            logits = model(x)
+            if isinstance(logits, tuple):
+                logits = logits[0]
+            if logits.ndim != 2 or logits.shape != (len(y), 10):
+                raise ValueError("MNIST model output must have shape [batch, 10].")
+            total_loss += float(F.cross_entropy(logits, y, reduction="sum"))
+            predicted = logits.argmax(dim=1)
+            correct += int((predicted == y).sum())
+            seen += len(y)
+            for label in range(10):
+                mask = y == label
+                class_total[label] += int(mask.sum())
+                class_correct[label] += int(((predicted == y) & mask).sum())
+    model.to("cpu")
+    return {"report": {"dataset": "MNIST", "samples": seen, "accuracy": correct / seen,
+            "loss": total_loss / seen, "correct": correct,
+            "per_class_accuracy": {str(i): (class_correct[i] / class_total[i] if class_total[i] else None)
+                                   for i in range(10)}}}
+
+
+def _mnist_predict(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    from torch.utils.data import DataLoader, TensorDataset
+    model = _get_model(inputs["model"]).eval()
+    images, labels = _read_mnist_tensor_dataset(inputs["dataset"])
+    limit = int(config.get("limit", 20))
+    if not 1 <= limit <= 1000:
+        raise ValueError("Prediction limit must be between 1 and 1000.")
+    device = _resolve_device("auto")
+    model.to(device)
+    rows = []
+    with torch.no_grad():
+        for batch_images, batch_labels in DataLoader(TensorDataset(images[:limit], labels[:limit]),
+                                                       batch_size=128, shuffle=False):
+            x = batch_images.to(device=device, dtype=torch.float32).div_(255.0)
+            logits = model(x)
+            if isinstance(logits, tuple):
+                logits = logits[0]
+            probabilities = torch.softmax(logits, dim=1)
+            scores, predicted = probabilities.max(dim=1)
+            rows.extend({"index": len(rows) + i, "prediction": int(label),
+                         "actual": int(actual), "confidence": float(score)}
+                        for i, (label, actual, score) in enumerate(zip(predicted.cpu(), batch_labels, scores.cpu())))
+    model.to("cpu")
+    return {"predictions": {"dataset": "MNIST", "count": len(rows), "rows": rows}}
+
+
+def _model_checkpoint_path(checkpoint_id: str) -> Path:
+    if not checkpoint_id or any(ch not in "0123456789abcdef" for ch in checkpoint_id):
+        raise ValueError("Invalid saved model ID.")
+    return MODEL_ROOT / f"{checkpoint_id}.pt"
+
+
+def _model_save(_config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    model_ref = inputs["model"]
+    model = _get_model(model_ref)
+    graph_spec = model_ref.get("graph")
+    if not isinstance(graph_spec, dict):
+        raise ValueError("Model reference does not contain its architecture graph.")
+    checkpoint_id = uuid.uuid4().hex
+    MODEL_ROOT.mkdir(parents=True, exist_ok=True)
+    path = _model_checkpoint_path(checkpoint_id)
+    torch.save({"graph": graph_spec, "state_dict": model.state_dict()}, path)
+    return {"model": {**model_ref, "checkpoint_id": checkpoint_id,
+                      "checkpoint_path": str(path), "saved": True}}
+
+
+def _model_load(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    checkpoint_id = str(config.get("checkpoint_id", ""))
+    path = _model_checkpoint_path(checkpoint_id)
+    if not path.is_file():
+        raise ValueError("Saved model checkpoint was not found.")
+    try:
+        payload = torch.load(path, map_location="cpu", weights_only=True)
+        graph_spec, state = payload["graph"], payload["state_dict"]
+        if not isinstance(graph_spec, dict) or not isinstance(state, dict):
+            raise ValueError("Checkpoint metadata is invalid.")
+        model_id, model = _compile_model(graph_spec)
+        model.load_state_dict(state, strict=True)
+        model.eval()
+    except Exception as exc:
+        raise ValueError(f"Could not restore saved model: {exc}") from exc
+    return {"model": {"kind": "model_ref", "model_id": model_id, "graph": graph_spec,
+                      "parameter_count": sum(p.numel() for p in model.parameters()),
+                      "checkpoint_id": checkpoint_id, "saved": True}}
+
+
 def _custom_python(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
     import subprocess
     import sys
@@ -649,6 +890,16 @@ COMPONENTS.update({
         "report": "metadata"}, "run": _model_evaluate},
     "model.infer": {"inputs": {"model": "model_ref"}, "outputs": {
         "predictions": "metadata"}, "run": _model_infer},
+    "model.save": {"inputs": {"model": "model_ref"}, "outputs": {"model": "model_ref"}, "run": _model_save},
+    "model.load": {"inputs": {}, "outputs": {"model": "model_ref"}, "run": _model_load},
+    "mnist.load": {"inputs": {}, "outputs": {
+        "train": "dataset_ref", "test": "dataset_ref", "metadata": "metadata"}, "run": _mnist_load},
+    "mnist.train": {"inputs": {"model": "model_ref", "dataset": "dataset_ref"}, "outputs": {
+        "model": "model_ref", "metrics": "metadata"}, "run": _mnist_train},
+    "mnist.evaluate": {"inputs": {"model": "model_ref", "dataset": "dataset_ref"}, "outputs": {
+        "report": "metadata"}, "run": _mnist_evaluate},
+    "mnist.predict": {"inputs": {"model": "model_ref", "dataset": "dataset_ref"}, "outputs": {
+        "predictions": "metadata"}, "run": _mnist_predict},
     "python.custom": {"inputs": {"dataset": "dataset_ref"}, "outputs": {
         "dataset": "dataset_ref"}, "run": _custom_python},
 })

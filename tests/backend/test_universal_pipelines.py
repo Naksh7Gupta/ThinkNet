@@ -393,6 +393,7 @@ def test_background_pipeline_job_persists_experiment(tmp_path, monkeypatch):
     experiment = jobs.get_experiment(run_id)
     assert experiment["name"] == "background-smoke"
     assert experiment["seed"] == 11
+    assert experiment["graph"]["name"] == "background-smoke"
     assert experiment["status"] == "completed"
     assert experiment["outputs"]["inspect"]["report"]["rows"] == 2
 

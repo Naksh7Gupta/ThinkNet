@@ -20,9 +20,24 @@ def write_csv(path, rows):
         writer.writerows(rows)
 
 
-def test_catalog_exposes_only_implemented_components():
+def test_catalog_exposes_core_pipeline_components():
     names = {item["type"] for item in pipelines.component_catalog()}
-    assert names == {"csv.load", "dataset.inspect", "dataset.select_xy", "dataset.split_xy"}
+    assert {
+        "csv.load",
+        "text.load",
+        "image.folder",
+        "audio.wav_folder",
+        "dataset.inspect",
+        "dataset.select_xy",
+        "dataset.split_xy",
+        "model.build_graph",
+        "model.import_weights",
+        "model.train_classifier",
+        "model.evaluate_classifier",
+        "model.infer",
+        "python.custom",
+        "multimodal.join",
+    } <= names
 
 
 def test_graph_validation_rejects_cycles():

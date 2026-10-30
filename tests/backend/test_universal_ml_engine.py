@@ -68,3 +68,46 @@ def test_universal_ml_clustering_workflow(tmp_path, monkeypatch):
     report = ml._evaluate({}, {"model": fitted["model"], "X": x_ref}, {})
     assert report["report"]["clusters"] == 2
     assert "silhouette_score" in report["report"]
+
+
+def test_universal_classifier_runs_through_shared_dag(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipelines, "ARTIFACT_ROOT", tmp_path)
+    ml.ML_MODELS.clear()
+    source = tmp_path / "classification.csv"
+    source.write_text(
+        "length,width,label\\n"
+        "1,1,small\\n2,1,small\\n1,2,small\\n"
+        "8,8,large\\n9,8,large\\n8,9,large\\n"
+        "2,2,small\\n9,9,large\\n",
+        encoding="utf-8",
+    )
+    graph = pipelines.PipelineGraph(
+        name="universal-classification",
+        nodes=[
+            {"id": "load", "type": "csv.load", "config": {"path": str(source)}},
+            {"id": "xy", "type": "dataset.select_xy",
+             "config": {"feature_columns": ["length", "width"], "target_column": "label"}},
+            {"id": "split", "type": "dataset.split_xy",
+             "config": {"validation_fraction": 0, "test_fraction": 0.25}},
+            {"id": "fit", "type": "ml.fit",
+             "config": {"task": "classification", "estimator": "logistic_regression"}},
+            {"id": "evaluate", "type": "ml.evaluate"},
+            {"id": "predict", "type": "ml.predict"},
+        ],
+        edges=[
+            {"source": "load", "target": "xy", "source_port": "dataset", "target_port": "dataset"},
+            {"source": "xy", "target": "split", "source_port": "X", "target_port": "X"},
+            {"source": "xy", "target": "split", "source_port": "Y", "target_port": "Y"},
+            {"source": "split", "target": "fit", "source_port": "X_train", "target_port": "X"},
+            {"source": "split", "target": "fit", "source_port": "Y_train", "target_port": "Y"},
+            {"source": "fit", "target": "evaluate", "source_port": "model", "target_port": "model"},
+            {"source": "split", "target": "evaluate", "source_port": "X_test", "target_port": "X"},
+            {"source": "split", "target": "evaluate", "source_port": "Y_test", "target_port": "Y"},
+            {"source": "fit", "target": "predict", "source_port": "model", "target_port": "model"},
+            {"source": "split", "target": "predict", "source_port": "X_test", "target_port": "X"},
+        ],
+    )
+    result = pipelines.execute_pipeline(graph, seed=12)
+    assert result["status"] == "completed", result.get("error")
+    assert result["outputs"]["evaluate"]["report"]["accuracy"] >= 0.5
+    assert result["outputs"]["predict"]["predictions"]["count"] == 2

@@ -327,12 +327,12 @@ def _run_job(job_id: str, graph_payload: dict[str, Any], settings: dict[str, Any
     parameter_count = 0
     try:
         _update(job_id, phase="preparing", message="Validating graph, dataset and tokenizer.")
+        torch.manual_seed(settings["seed"])
         prepared = _prepare_run(graph_payload, settings)
         tokenizer = _load_tokenizer(prepared["tokenizer_name"])
         token_ids = prepared["token_ids"]
         graph_payload = prepared["graph_payload"]
 
-        torch.manual_seed(settings["seed"])
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         model = prepared["model"].to(device)

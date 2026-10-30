@@ -801,7 +801,8 @@ def _mnist_predict(config: dict[str, Any], inputs: dict[str, Any], _context: dic
                 logits = logits[0]
             probabilities = torch.softmax(logits, dim=1)
             scores, predicted = probabilities.max(dim=1)
-            rows.extend({"index": len(rows) + i, "prediction": int(label),
+            offset = len(rows)
+            rows.extend({"index": offset + i, "prediction": int(label),
                          "actual": int(actual), "confidence": float(score)}
                         for i, (label, actual, score) in enumerate(zip(predicted.cpu(), batch_labels, scores.cpu())))
     model.to("cpu")

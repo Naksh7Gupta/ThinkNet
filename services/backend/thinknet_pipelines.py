@@ -677,49 +677,7 @@ def _multimodal_join(config: dict[str, Any], inputs: dict[str, Any], _context: d
                          "left_rows": len(left_rows), "right_rows": len(right_rows)}}
 
 
-def _robotics_jsonl(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
-    source = Path(str(config.get("path", ""))).expanduser()
-    if not source.is_file() or source.suffix.lower() not in {".jsonl", ".ndjson"}:
-        raise ValueError("Choose a ROS 2 telemetry export in JSONL/NDJSON format.")
-    if source.stat().st_size > MAX_CSV_BYTES:
-        raise ValueError("Robotics telemetry export exceeds the 50 MiB MVP limit.")
-    records = []
-    with source.open("r", encoding="utf-8") as stream:
-        for line_number, line in enumerate(stream, start=1):
-            if not line.strip():
-                continue
-            try:
-                item = json.loads(line)
-            except ValueError as exc:
-                raise ValueError(f"Invalid JSON on telemetry line {line_number}.") from exc
-            if not isinstance(item, dict):
-                raise ValueError(f"Telemetry line {line_number} must be a JSON object.")
-            records.append(item)
-    if not records:
-        raise ValueError("Robotics telemetry file contains no records.")
-    columns = list(dict.fromkeys(key for row in records for key in row))
-    # CSV artifacts intentionally keep scalar telemetry fields; nested ROS messages
-    # must be flattened by the exporter before they enter this first adapter.
-    rows = []
-    for row in records:
-        flattened = {}
-        for key in columns:
-            value = row.get(key, "")
-            if isinstance(value, (dict, list)):
-                raise ValueError(f"Telemetry field '{key}' is nested; flatten it in the ROS 2 export first.")
-            flattened[key] = value
-        rows.append(flattened)
-    if "sample_id" not in columns:
-        for index, row in enumerate(rows):
-            row["sample_id"] = f"ros-{index + 1:06d}"
-        columns.insert(0, "sample_id")
-    return {"dataset": _write_csv(rows, columns),
-            "metadata": {"modality": "robotics", "records": len(rows), "source_name": source.name}}
-
-
 COMPONENTS.update({
     "multimodal.join": {"inputs": {"left": "dataset_ref", "right": "dataset_ref"}, "outputs": {
         "dataset": "dataset_ref", "metadata": "metadata"}, "run": _multimodal_join},
-    "robotics.ros2_jsonl": {"inputs": {}, "outputs": {
-        "dataset": "dataset_ref", "metadata": "metadata"}, "run": _robotics_jsonl},
 })

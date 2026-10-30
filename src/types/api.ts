@@ -299,11 +299,11 @@ export type PipelineValidation = {
 export type PipelineRun = {
   run_id: string;
   name: string;
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "cancelled";
   nodes: Array<{
     node_id: string;
     type: string;
-    status: "completed" | "failed";
+    status: "running" | "completed" | "failed";
     started_at: string;
     finished_at: string;
     error?: string;

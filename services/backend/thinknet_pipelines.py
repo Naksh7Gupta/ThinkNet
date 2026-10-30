@@ -341,8 +341,8 @@ def _load_text(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[s
     documents = [line.strip() for line in text.splitlines() if line.strip()] if mode == "lines" else [text]
     if not documents:
         raise ValueError("No non-empty text documents were found.")
-    rows = [{"text": item, "label": ""} for item in documents]
-    return {"dataset": _write_csv(rows, ["text", "label"]),
+    rows = [{"sample_id": f"doc-{index + 1:06d}", "text": item, "label": ""} for index, item in enumerate(documents)]
+    return {"dataset": _write_csv(rows, ["sample_id", "text", "label"]),
             "metadata": {"modality": "text", "documents": len(rows), "source_name": source.name}}
 
 
@@ -354,10 +354,10 @@ def _load_image_folder(config: dict[str, Any], _inputs: dict[str, Any], _context
     rows = []
     for class_dir in sorted(p for p in root.iterdir() if p.is_dir()):
         for file in sorted(p for p in class_dir.rglob("*") if p.is_file() and p.suffix.lower() in allowed):
-            rows.append({"path": str(file.resolve()), "label": class_dir.name})
+            rows.append({"sample_id": file.stem, "path": str(file.resolve()), "label": class_dir.name})
     if not rows:
         raise ValueError("No supported images found. Expected class-name subfolders.")
-    return {"dataset": _write_csv(rows, ["path", "label"]),
+    return {"dataset": _write_csv(rows, ["sample_id", "path", "label"]),
             "metadata": {"modality": "image", "images": len(rows), "classes": sorted({r["label"] for r in rows})}}
 
 
@@ -376,11 +376,11 @@ def _load_audio_folder(config: dict[str, Any], _inputs: dict[str, Any], _context
                 raise ValueError(f"Invalid WAV file: {file.name}") from exc
             if rate <= 0 or frames <= 0:
                 continue
-            rows.append({"path": str(file.resolve()), "label": class_dir.name,
+            rows.append({"sample_id": file.stem, "path": str(file.resolve()), "label": class_dir.name,
                          "sample_rate": rate, "channels": channels, "duration_seconds": frames / rate})
     if not rows:
         raise ValueError("No valid WAV files found in class-name subfolders.")
-    return {"dataset": _write_csv(rows, ["path", "label", "sample_rate", "channels", "duration_seconds"]),
+    return {"dataset": _write_csv(rows, ["sample_id", "path", "label", "sample_rate", "channels", "duration_seconds"]),
             "metadata": {"modality": "audio", "clips": len(rows), "classes": sorted({r["label"] for r in rows})}}
 
 
@@ -651,4 +651,75 @@ COMPONENTS.update({
         "predictions": "metadata"}, "run": _model_infer},
     "python.custom": {"inputs": {"dataset": "dataset_ref"}, "outputs": {
         "dataset": "dataset_ref"}, "run": _custom_python},
+})
+
+
+def _multimodal_join(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    left_rows, left_columns = _read_csv(inputs["left"])
+    right_rows, right_columns = _read_csv(inputs["right"])
+    key = str(config.get("key", "sample_id"))
+    if key not in left_columns or key not in right_columns:
+        raise ValueError(f"Both modality datasets must contain the join key '{key}'.")
+    right_index = {row[key]: row for row in right_rows}
+    if len(right_index) != len(right_rows):
+        raise ValueError(f"Right modality contains duplicate '{key}' values.")
+    joined = []
+    for left in left_rows:
+        match = right_index.get(left[key])
+        if match is None:
+            continue
+        joined.append({**left, **{f"right_{k}" if k in left else k: v for k, v in match.items() if k != key}})
+    if not joined:
+        raise ValueError("No matching sample IDs were found between the modality datasets.")
+    columns = list(joined[0])
+    return {"dataset": _write_csv(joined, columns),
+            "metadata": {"join_key": key, "matched_samples": len(joined),
+                         "left_rows": len(left_rows), "right_rows": len(right_rows)}}
+
+
+def _robotics_jsonl(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    source = Path(str(config.get("path", ""))).expanduser()
+    if not source.is_file() or source.suffix.lower() not in {".jsonl", ".ndjson"}:
+        raise ValueError("Choose a ROS 2 telemetry export in JSONL/NDJSON format.")
+    if source.stat().st_size > MAX_CSV_BYTES:
+        raise ValueError("Robotics telemetry export exceeds the 50 MiB MVP limit.")
+    records = []
+    with source.open("r", encoding="utf-8") as stream:
+        for line_number, line in enumerate(stream, start=1):
+            if not line.strip():
+                continue
+            try:
+                item = json.loads(line)
+            except ValueError as exc:
+                raise ValueError(f"Invalid JSON on telemetry line {line_number}.") from exc
+            if not isinstance(item, dict):
+                raise ValueError(f"Telemetry line {line_number} must be a JSON object.")
+            records.append(item)
+    if not records:
+        raise ValueError("Robotics telemetry file contains no records.")
+    columns = list(dict.fromkeys(key for row in records for key in row))
+    # CSV artifacts intentionally keep scalar telemetry fields; nested ROS messages
+    # must be flattened by the exporter before they enter this first adapter.
+    rows = []
+    for row in records:
+        flattened = {}
+        for key in columns:
+            value = row.get(key, "")
+            if isinstance(value, (dict, list)):
+                raise ValueError(f"Telemetry field '{key}' is nested; flatten it in the ROS 2 export first.")
+            flattened[key] = value
+        rows.append(flattened)
+    if "sample_id" not in columns:
+        for index, row in enumerate(rows):
+            row["sample_id"] = f"ros-{index + 1:06d}"
+        columns.insert(0, "sample_id")
+    return {"dataset": _write_csv(rows, columns),
+            "metadata": {"modality": "robotics", "records": len(rows), "source_name": source.name}}
+
+
+COMPONENTS.update({
+    "multimodal.join": {"inputs": {"left": "dataset_ref", "right": "dataset_ref"}, "outputs": {
+        "dataset": "dataset_ref", "metadata": "metadata"}, "run": _multimodal_join},
+    "robotics.ros2_jsonl": {"inputs": {}, "outputs": {
+        "dataset": "dataset_ref", "metadata": "metadata"}, "run": _robotics_jsonl},
 })

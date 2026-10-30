@@ -238,3 +238,48 @@ This is an incremental universal foundation: DAG execution, artifact contracts,
 and project workflow are shared, while task-specific adapters select their
 own estimators and metrics. It deliberately does not claim that all tasks use
 the same model or training algorithm.
+
+
+## Universal task adapters, LLM training, jobs and experiments
+
+### Reusable text and tabular tasks
+
+The universal estimator layer in `services/backend/thinknet_ml_engine.py` is not intended to be the limit of ThinkNet's algorithm support. It is one adapter family behind the same typed DAG/component contract. Current scikit-learn adapters cover classification, regression and clustering, while the PyTorch graph and MNIST components remain available for neural workflows.
+
+For text classification, use `text.tfidf_split` after the paired train/test split. It fits its vocabulary on the training text only and transforms held-out text with that same vocabulary, avoiding test-set vocabulary leakage.
+
+### Causal LLM training inside the pipeline
+
+- `llm.train_causal` wraps ThinkNet's existing managed causal-language-model training job. Configure `model_graph` (a ThinkNet graph with integer token input, decoder/token embedding and LM head) and a `training` object using the existing TrainingSettings fields: `dataset_path`, `tokenizer_name`, `sequence_length`, `batch_size`, `max_steps`, `learning_rate`, `log_every_steps`, `save_every_steps`, `weight_decay`, `gradient_clip_norm`, `seed`, and `output_dir`.
+- The node waits for the managed training job, then emits an `llm_model_ref` and final metrics. The underlying trainer writes model weights, aligned graph, tokenizer, manifest, metrics and checkpoints under `training_output/jobs/<job_id>`.
+- `llm.generate` accepts that model reference and runs local greedy autoregressive generation. Configure `prompt`, `max_new_tokens` (1–256), and `temperature` (0–2).
+- This is a first causal-LM workflow, not a general Hugging Face fine-tuning framework: no instruction tuning, SFT, LoRA/QLoRA, preference optimization, distributed training or remote GPU provisioning is claimed here.
+
+### Background execution
+
+- `POST /api/v1/pipelines/jobs` accepts a validated graph and returns a job ID immediately (HTTP 202).
+- `GET /api/v1/pipelines/jobs` lists active jobs and recent history.
+- `GET /api/v1/pipelines/jobs/{job_id}` returns status, current component, progress and result.
+- `POST /api/v1/pipelines/jobs/{job_id}/cancel` requests cooperative cancellation.
+- The local backend runs up to two pipeline jobs concurrently in worker threads. Individual components run in that worker; the UI stays responsive. Cancellation is checked between components. The LLM adapter also forwards cancellation to its managed training job. A component already running may need to finish or observe its own cancellation before the pipeline stops.
+- Active worker state is process-local and is lost if the backend exits; completed experiment records persist locally.
+
+### Experiment tracking
+
+- Every background run stores a JSON experiment record containing the graph snapshot, seed, node statuses/timestamps, outputs, metrics and final status.
+- Default directory: `training_output/experiments`; override with `THINKNET_EXPERIMENT_DIR`.
+- `GET /api/v1/pipelines/experiments` lists saved experiments.
+- `GET /api/v1/pipelines/experiments/{run_id}` retrieves the full record.
+- The Pipeline Builder exposes a recent Experiments selector. This is local run history, not yet a full experiment analytics dashboard or multi-user tracking server.
+
+### Pipeline templates
+
+The Pipeline Builder now offers templates for:
+- Sentiment / spam classification: CSV text+label → paired split → train-only TF-IDF → logistic regression → evaluation and prediction.
+- Tabular classification: CSV → X/Y → split → logistic regression → evaluation and prediction.
+- Regression: CSV → X/Y → split → linear regression → MAE/RMSE/R² and prediction.
+- Clustering: CSV → feature selection → K-means → cluster evaluation.
+- Causal LLM training: a small decoder-only transformer graph → tokenizer/text training → generation.
+- MNIST image classification remains available as its own starter.
+
+Templates are editable starting points. Users must set real dataset paths and actual column names; they should validate the graph before running it.

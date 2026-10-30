@@ -240,6 +240,13 @@ def _order(graph: PipelineGraph) -> tuple[list[PipelineNode], dict[str, list[Pip
             source_component = COMPONENTS[by_id[edge.source].type]
             if edge.source_port not in source_component["outputs"]:
                 raise ValueError(f"Node '{edge.source}' has no output port '{edge.source_port}'.")
+            source_kind = source_component["outputs"][edge.source_port].rstrip("?")
+            target_kind = component["inputs"][edge.target_port].rstrip("?")
+            if source_kind != target_kind:
+                raise ValueError(
+                    f"Incompatible connection {edge.source}.{edge.source_port} ({source_kind}) "
+                    f"→ {node.id}.{edge.target_port} ({target_kind})."
+                )
             if edge.target_port in {e.target_port for e in incoming[node.id] if e is not edge}:
                 raise ValueError(f"Input port '{edge.target_port}' on '{node.id}' can only have one connection.")
     return ordered, incoming
@@ -268,8 +275,14 @@ def execute_pipeline(graph: PipelineGraph, seed: int = 42) -> dict[str, Any]:
         except Exception as exc:
             records.append({"node_id": node.id, "type": node.type, "status": "failed",
                             "started_at": started, "finished_at": _now(), "error": str(exc)})
-            return {"run_id": context["run_id"], "status": "failed", "nodes": records,
-                    "error": f"Node '{node.id}' failed: {exc}"}
+            failure = {"run_id": context["run_id"], "name": graph.name, "status": "failed",
+                       "nodes": records, "error": f"Node '{node.id}' failed: {exc}"}
+            ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
+            (ARTIFACT_ROOT / f"run-{context['run_id']}.json").write_text(
+                json.dumps(failure, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            failure["run_record"] = f"run-{context['run_id']}.json"
+            return failure
     ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
     result = {"run_id": context["run_id"], "name": graph.name, "status": "completed",
               "nodes": records, "outputs": values}

@@ -285,12 +285,18 @@ def execute_pipeline(graph: PipelineGraph, seed: int = 42, *, on_node: Any = Non
             if on_node:
                 on_node(record)
         except Exception as exc:
-            record = {"node_id": node.id, "type": node.type, "status": "failed", "started_at": started, "finished_at": _now(), "error": str(exc)}
+            cancelled = cancel_event is not None and cancel_event.is_set()
+            record = {"node_id": node.id, "type": node.type,
+                      "status": "cancelled" if cancelled else "failed",
+                      "started_at": started, "finished_at": _now(), "error": str(exc)}
             records.append(record)
             if on_node:
                 on_node(record)
-            result = {"run_id": context["run_id"], "name": graph.name, "status": "failed",
-                      "nodes": records, "outputs": values, "error": f"Node '{node.id}' failed: {exc}"}
+            result = {"run_id": context["run_id"], "name": graph.name,
+                      "status": "cancelled" if cancelled else "failed",
+                      "nodes": records, "outputs": values,
+                      "message": "Pipeline cancellation requested." if cancelled else "",
+                      "error": None if cancelled else f"Node '{node.id}' failed: {exc}"}
             break
     else:
         result = {"run_id": context["run_id"], "name": graph.name, "status": "completed", "nodes": records, "outputs": values}
@@ -742,6 +748,10 @@ def _mnist_train(config: dict[str, Any], inputs: dict[str, Any], context: dict[s
             correct += int((logits.argmax(dim=1) == batch_labels).sum())
             seen += len(batch_labels)
         history.append({"epoch": epoch + 1, "loss": total_loss / seen, "accuracy": correct / seen})
+        progress_callback = context.get("progress_callback")
+        if progress_callback:
+            progress_callback("mnist_train", 100.0 * (epoch + 1) / epochs,
+                              f"MNIST training epoch {epoch + 1}/{epochs}")
     model.to("cpu").eval()
     return {"model": model_ref, "metrics": {"dataset": "MNIST", "epochs": epochs,
             "samples": len(labels), "training_loss": history[-1]["loss"],
@@ -1014,12 +1024,14 @@ def _llm_generate(config: dict[str, Any], inputs: dict[str, Any], _context: dict
             if isinstance(logits, (tuple, list)):
                 logits = logits[0]
             next_logits = logits[:, -1, :] / temperature
-            next_token = torch.argmax(next_logits, dim=-1, keepdim=True)
+            probabilities = torch.softmax(next_logits, dim=-1)
+            generator = torch.Generator(device=device).manual_seed(int(_context.get("seed", 42)))
+            next_token = torch.multinomial(probabilities, num_samples=1, generator=generator)
             generated = torch.cat((generated, next_token), dim=1)
             if tokenizer.eos_token_id is not None and int(next_token.item()) == tokenizer.eos_token_id:
                 break
     text = tokenizer.decode(generated[0].detach().cpu().tolist(), skip_special_tokens=True)
-    return {"predictions": {"text": text, "prompt": prompt,
+    return {"predictions": {"text": text, "generated_text": tokenizer.decode(generated[0, token_ids.shape[1]:].detach().cpu().tolist(), skip_special_tokens=True), "prompt": prompt,
                             "new_tokens": int(generated.shape[1] - token_ids.shape[1]),
                             "model_job_id": job_id}}
 

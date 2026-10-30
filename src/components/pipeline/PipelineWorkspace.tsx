@@ -178,6 +178,38 @@ export function PipelineWorkspace() {
         ["split", "evaluate", "Y_test", "Y"], ["fit", "predict", "model", "model"],
         ["split", "predict", "X_test", "X"],
       ];
+    } else if (template === "torch-classification" || template === "torch-regression") {
+      const regression = template === "torch-regression";
+      title = regression ? "PyTorch Tabular Regression" : "PyTorch Tabular Classification";
+      const modelGraph = {
+        name: regression ? "tabular-regressor" : "tabular-classifier",
+        nodes: [
+          { id: "input", type: "Input", config: { shape: [2] } },
+          { id: "network", type: "Architecture", config: { architecture: "mlp", config: { input_dim: 2, output_dim: regression ? 1 : 2, hidden_dims: [64, 32] } } },
+          { id: "output", type: "Output", config: {} },
+        ],
+        edges: [
+          { source: "input", target: "network", source_port: "output", target_port: "input" },
+          { source: "network", target: "output", source_port: "output", target_port: "input" },
+        ],
+      };
+      definitions = [
+        { id: "load", type: "csv.load", config: { path: "C:/datasets/data.csv" }, inputPort: "input", outputPort: "dataset" },
+        { id: "xy", type: "dataset.select_xy", config: { feature_columns: ["feature_1", "feature_2"], target_column: "target" }, inputPort: "dataset", outputPort: "X" },
+        { id: "split", type: "dataset.split_xy", config: { validation_fraction: 0, test_fraction: 0.2 }, inputPort: "X", outputPort: "X_train" },
+        { id: "model", type: "model.build_graph", config: { graph: modelGraph }, inputPort: "input", outputPort: "model" },
+        { id: "fit", type: "torch.fit", config: { task: regression ? "regression" : "classification", epochs: 10, batch_size: 32, learning_rate: 0.001, optimizer: "adamw", device: "auto" }, inputPort: "model", outputPort: "model" },
+        { id: "evaluate", type: "torch.evaluate", config: {}, inputPort: "model", outputPort: "report" },
+        { id: "predict", type: "torch.predict", config: {}, inputPort: "model", outputPort: "predictions" },
+        { id: "save", type: "model.save", config: {}, inputPort: "model", outputPort: "model" },
+      ];
+      connections = [
+        ["load", "xy", "dataset", "dataset"], ["xy", "split", "X", "X"], ["xy", "split", "Y", "Y"],
+        ["model", "fit", "model", "model"], ["split", "fit", "X_train", "X"], ["split", "fit", "Y_train", "Y"],
+        ["fit", "evaluate", "model", "model"], ["split", "evaluate", "X_test", "X"], ["split", "evaluate", "Y_test", "Y"],
+        ["fit", "predict", "model", "model"], ["split", "predict", "X_test", "X"],
+        ["fit", "save", "model", "model"],
+      ];
     } else if (template === "clustering") {
       title = "Customer Clustering";
       definitions = [
@@ -404,8 +436,10 @@ export function PipelineWorkspace() {
         <select aria-label="Load pipeline template" className="h-9 max-w-52 rounded-md border border-border bg-card px-2 text-sm" defaultValue="" onChange={(event) => { if (event.target.value) loadTemplate(event.target.value); event.target.value = ""; }}>
           <option value="">Load template…</option>
           <option value="sentiment">Sentiment / spam classification</option>
-          <option value="classification">Tabular classification</option>
-          <option value="regression">Regression</option>
+          <option value="classification">Tabular classification · scikit-learn</option>
+          <option value="torch-classification">Tabular classification · PyTorch</option>
+          <option value="regression">Regression · scikit-learn</option>
+          <option value="torch-regression">Regression · PyTorch</option>
           <option value="clustering">Clustering</option>
           <option value="llm">Causal LLM training</option>
         </select>

@@ -165,7 +165,8 @@ def test_pytorch_adapter_trains_evaluates_and_predicts_tabular_classifier(tmp_pa
     assert set(predicted["predictions"]["values"]) <= {"left", "right"}
     monkeypatch.setattr(pipelines, "MODEL_ROOT", tmp_path / "checkpoints")
     saved = pipelines._model_save({}, {"model": fitted["model"]}, {})
-    pipelines.MODEL_STORE.pop(fitted["model"]["model_id"], None)
+    from services.backend.thinknet_backend_core import MODEL_STORE
+    MODEL_STORE.pop(fitted["model"]["model_id"], None)
     restored = pipelines._model_load(
         {"checkpoint_id": saved["model"]["checkpoint_id"]}, {}, {},
     )["model"]

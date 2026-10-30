@@ -232,7 +232,7 @@ For text classification, use `text.tfidf_split` after the paired train/test spli
 
 - `llm.train_causal` wraps ThinkNet's existing managed causal-language-model training job. Configure `model_graph` (a ThinkNet graph with integer token input, decoder/token embedding and LM head) and a `training` object using the existing TrainingSettings fields: `dataset_path`, `tokenizer_name`, `sequence_length`, `batch_size`, `max_steps`, `learning_rate`, `log_every_steps`, `save_every_steps`, `weight_decay`, `gradient_clip_norm`, `seed`, and `output_dir`.
 - The node waits for the managed training job, then emits an `llm_model_ref` and final metrics. The underlying trainer writes model weights, aligned graph, tokenizer, manifest, metrics and checkpoints under `training_output/jobs/<job_id>`.
-- `llm.generate` accepts that model reference and runs local seeded temperature-sampled autoregressive generation. Configure `prompt`, `max_new_tokens` (1–256), and `temperature` (0–2).
+- `llm.load` reopens a saved causal-LM artifact bundle by its training job ID, including after a backend restart. `llm.generate` accepts either the newly trained or reloaded model reference and runs local seeded temperature-sampled autoregressive generation. Configure `prompt`, `max_new_tokens` (1–256), and `temperature` (0–2).
 - This is a first causal-LM workflow, not a general Hugging Face fine-tuning framework: no instruction tuning, SFT, LoRA/QLoRA, preference optimization, distributed training or remote GPU provisioning is claimed here.
 
 ### Background execution

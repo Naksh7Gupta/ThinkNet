@@ -6,7 +6,7 @@ from services.backend import thinknet_pipelines as pipelines
 
 def test_universal_ml_components_are_registered():
     names = {item["type"] for item in pipelines.component_catalog()}
-    assert {"text.tfidf", "ml.fit", "ml.evaluate", "ml.predict"} <= names
+    assert {"text.tfidf", "ml.fit", "ml.evaluate", "ml.predict", "torch.fit", "torch.evaluate", "torch.predict"} <= names
 
 
 def test_text_tfidf_and_classification_workflow(tmp_path, monkeypatch):
@@ -128,3 +128,38 @@ def test_tfidf_split_fits_vocabulary_on_training_only(tmp_path, monkeypatch):
     assert len(train_rows) == 2 and len(test_rows) == 1
     assert result["metadata"]["fit_scope"] == "training_split_only"
     assert all(value == "0.0" for value in test_rows[0].values())
+
+
+def test_pytorch_adapter_trains_evaluates_and_predicts_tabular_classifier(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipelines, "ARTIFACT_ROOT", tmp_path)
+    graph = {
+        "name": "small-tabular-mlp",
+        "nodes": [
+            {"id": "input", "type": "Input", "config": {"shape": [2]}},
+            {"id": "network", "type": "Architecture",
+             "config": {"architecture": "mlp", "config": {"input_dim": 2, "output_dim": 2, "hidden_dims": [8]}}},
+            {"id": "output", "type": "Output", "config": {}},
+        ],
+        "edges": [
+            {"source": "input", "target": "network", "source_port": "output", "target_port": "input"},
+            {"source": "network", "target": "output", "source_port": "output", "target_port": "input"},
+        ],
+    }
+    model_ref = pipelines._model_build({"graph": graph}, {}, {})["model"]
+    x_ref = pipelines._write_csv(
+        [{"x1": str(i), "x2": str(i % 2)} for i in range(20)],
+        ["x1", "x2"],
+    )
+    y_ref = pipelines._write_csv(
+        [{"label": "left" if i < 10 else "right"} for i in range(20)], ["label"],
+    )
+    fitted = ml._torch_fit(
+        {"task": "classification", "epochs": 3, "batch_size": 5, "learning_rate": 0.01},
+        {"model": model_ref, "X": x_ref, "Y": y_ref}, {"seed": 5},
+    )
+    report = ml._torch_evaluate({}, {"model": fitted["model"], "X": x_ref, "Y": y_ref}, {})
+    predicted = ml._torch_predict({}, {"model": fitted["model"], "X": x_ref}, {})
+    assert fitted["model"]["task"] == "classification"
+    assert report["report"]["samples"] == 20
+    assert predicted["predictions"]["count"] == 20
+    assert set(predicted["predictions"]["values"]) <= {"left", "right"}

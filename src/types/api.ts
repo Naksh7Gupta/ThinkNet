@@ -312,3 +312,18 @@ export type PipelineRun = {
   error?: string;
   run_record?: string;
 };
+
+
+export type PipelineProjectSummary = {
+  project_id: string;
+  name: string;
+  description: string;
+  updated_at: string;
+};
+
+export type PipelineProject = PipelineProjectSummary & {
+  graph: PipelineGraph;
+  created_at: string;
+};
+
+export type PipelineProjectList = { projects: PipelineProjectSummary[] };

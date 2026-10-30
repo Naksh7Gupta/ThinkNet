@@ -32,7 +32,7 @@ The source file is standalone at `services/backend/thinknet_backend_core.py`; ru
 - `GET /api/v1/nodes` — node catalog for the GUI's "+" menus
 - `POST /api/v1/graphs/validate` — validate graph structure/configuration
 - `POST /api/v1/graphs/infer-shapes` — best-effort shape preview
-- `GET /api/v1/pipelines/components`, `POST /api/v1/pipelines/validate`, `POST /api/v1/pipelines/run` — reusable local pipeline execution, including MNIST image-classification training, evaluation, prediction, and model checkpoint save/load; see [UNIVERSAL_PIPELINES.md](./UNIVERSAL_PIPELINES.md).
+- `GET /api/v1/pipelines/components`, `POST /api/v1/pipelines/validate`, `POST /api/v1/pipelines/run`, and `GET/PUT/DELETE /api/v1/pipelines/projects/{project_id}` — local pipeline execution and project persistence, including MNIST image-classification training, evaluation, prediction, and model checkpoint save/load; see [UNIVERSAL_PIPELINES.md](./UNIVERSAL_PIPELINES.md).
 - `POST /api/v1/models/compile` — compile a graph and return a process-local `model_id`
 - `POST /api/v1/models/quantize` — create a new model handle from an existing compiled model using the selected dtype
 - `GET /api/v1/models/{model_id}` — inspect a stored model handle

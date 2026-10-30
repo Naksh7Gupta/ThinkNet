@@ -315,3 +315,29 @@ def test_mnist_pipeline_trains_evaluates_saves_and_reloads(tmp_path, artifact_ro
     assert restored_model is not None
     assert restored["model"]["parameter_count"] > 0
 
+def test_mnist_loader_creates_train_and_test_artifacts(tmp_path, artifact_root, monkeypatch):
+    import sys
+    import types
+    import torch
+
+    class FakeMNIST:
+        def __init__(self, root, train, download):
+            self.data = torch.zeros((8 if train else 4, 28, 28), dtype=torch.uint8)
+            self.targets = torch.arange(len(self.data), dtype=torch.long) % 10
+
+    torchvision = types.ModuleType("torchvision")
+    datasets = types.ModuleType("torchvision.datasets")
+    datasets.MNIST = FakeMNIST
+    torchvision.datasets = datasets
+    monkeypatch.setitem(sys.modules, "torchvision", torchvision)
+    monkeypatch.setitem(sys.modules, "torchvision.datasets", datasets)
+
+    result = pipelines._mnist_load({"root": str(tmp_path), "train_limit": 5}, {}, {})
+    train_images, train_labels = pipelines._read_mnist_tensor_dataset(result["train"])
+    test_images, test_labels = pipelines._read_mnist_tensor_dataset(result["test"])
+    assert tuple(train_images.shape) == (5, 1, 28, 28)
+    assert tuple(test_images.shape) == (4, 1, 28, 28)
+    assert len(train_labels) == 5
+    assert len(test_labels) == 4
+    assert result["metadata"]["dataset"] == "MNIST"
+

@@ -171,8 +171,41 @@ def _tfidf(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, A
                          "features": len(feature_names), "feature_columns": feature_names,\n                         "vocabulary_size": len(vectorizer.vocabulary_)}}
 
 
+def _tfidf_split(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    """Fit vocabulary on training text only, then transform held-out text."""
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from services.backend.thinknet_pipelines import _read_csv, _write_csv
+
+    text_column = str(config.get("text_column", "text"))
+    max_features = int(config.get("max_features", 2048))
+    if not 2 <= max_features <= 50000:
+        raise ValueError("max_features must be between 2 and 50000.")
+    train_rows, train_columns = _read_csv(inputs["X_train"])
+    test_rows, test_columns = _read_csv(inputs["X_test"])
+    if text_column not in train_columns or text_column not in test_columns:
+        raise ValueError(f"Both text splits must contain '{text_column}'.")
+    train_text = [row.get(text_column, "") for row in train_rows]
+    test_text = [row.get(text_column, "") for row in test_rows]
+    if not train_rows or not any(value.strip() for value in train_text):
+        raise ValueError("Training text split is empty.")
+    vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1, 2))
+    train_matrix = vectorizer.fit_transform(train_text)
+    test_matrix = vectorizer.transform(test_text)
+    names = [f"tfidf_{index}" for index in range(train_matrix.shape[1])]
+    train_ref = _write_csv([{name: float(value) for name, value in zip(names, row)}
+                            for row in train_matrix.toarray()], names)
+    test_ref = _write_csv([{name: float(value) for name, value in zip(names, row)}
+                           for row in test_matrix.toarray()], names)
+    return {"X_train": train_ref, "X_test": test_ref,
+            "metadata": {"method": "tfidf", "train_documents": len(train_rows),
+                         "test_documents": len(test_rows), "features": len(names),
+                         "vocabulary_size": len(vectorizer.vocabulary_),
+                         "fit_scope": "training_split_only"}}
+
+
 def register(components: dict[str, dict[str, Any]]) -> None:
     components.update({
+        "text.tfidf_split": {"inputs": {"X_train": "dataset_ref", "X_test": "dataset_ref"}, "outputs": {"X_train": "dataset_ref", "X_test": "dataset_ref", "metadata": "metadata"}, "run": _tfidf_split},
         "text.tfidf": {"inputs": {"dataset": "dataset_ref"}, "outputs": {
             "dataset": "dataset_ref", "metadata": "metadata"}, "run": _tfidf},
         "ml.fit": {"inputs": {"X": "dataset_ref", "Y": "dataset_ref?"}, "outputs": {

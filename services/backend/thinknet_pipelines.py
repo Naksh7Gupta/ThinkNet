@@ -493,7 +493,9 @@ def _compile_model(graph_spec: dict[str, Any]):
     return model_id, model
 
 
-def _model_build(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+def _model_build(config: dict[str, Any], _inputs: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    torch.manual_seed(int(context.get("seed", 42)))
     graph_spec = config.get("graph")
     if not isinstance(graph_spec, dict):
         raise ValueError("Provide a ThinkNet graph object in the model.build_graph configuration.")

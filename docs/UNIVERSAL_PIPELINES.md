@@ -86,8 +86,9 @@ Additional local components:
 - `audio.wav_folder`: indexes WAV files in class-name subfolders and records sample rate, channels and duration.
 - `model.build_graph` and `model.import_weights`: compile a supplied ThinkNet graph or safely load a state-dict checkpoint with its matching graph.
 - `model.train_classifier`, `model.evaluate_classifier`, and `model.infer`: basic supervised numeric-tabular classification using the compiled model.
+- `model.save` and `model.load`: durable local PyTorch checkpoint save/restore with the architecture graph.
+- `mnist.load`, `mnist.train`, `mnist.evaluate`, and `mnist.predict`: a complete first image-classification workflow using real MNIST tensor data.
 - `multimodal.join`: inner-joins two modality datasets on a shared sample ID.
-- `model.train_classifier`, `model.evaluate_classifier`, and `model.infer`: basic supervised numeric-tabular classification using the compiled model.
 - `python.custom`: invokes a user-selected Python script with JSON input/output files and a 30-second timeout. The script must accept input and output file paths as its two command-line arguments; input JSON contains `rows`, `columns`, and `config`; it must write a JSON list of row objects to the output path. **Only run scripts you trust**: custom Python executes on the local machine with the backend user’s permissions.
 
 Persistent projects are stored locally below `projects/pipelines` by default. Configure the directory with `THINKNET_PIPELINE_PROJECT_DIR`.
@@ -99,7 +100,7 @@ Persistent projects are stored locally below `projects/pipelines` by default. Co
 - Image/audio ingestion: `image.folder` or `audio.wav_folder → dataset.inspect`.
 - Multimodal sample pairing: image/text/audio datasets with shared `sample_id` values → `multimodal.join`.
 
-The image/audio nodes currently index files and labels; they do not yet decode, augment, batch, or train neural vision/audio models. Text ingestion currently creates document records; tokenizer, embedding, language-model training, and text evaluation adapters are still follow-up work. The multimodal join aligns records by sample ID but does not itself fuse neural embeddings. Model handles currently live in backend memory during a run; durable model registry/checkpoint lifecycle is still future work. Remote GPU execution is intentionally out of scope for this PR. Robotics and ROS 2 work is explicitly deferred; this branch will not expand those adapters.
+The image/audio nodes currently index files and labels; they do not yet decode, augment, batch, or train neural vision/audio models. Text ingestion currently creates document records; tokenizer, embedding, language-model training, and text evaluation adapters are still follow-up work. The multimodal join aligns records by sample ID but does not itself fuse neural embeddings. Model handles are process-local while executing; `model.save`/`model.load` now persist and restore checkpoint files, while a searchable model registry and experiment browser remain future work. Remote GPU execution is intentionally out of scope for this PR. Robotics and ROS 2 work is explicitly deferred; this branch will not expand those adapters.
 
 
 ## First complete example: MNIST classification
@@ -156,7 +157,7 @@ The intended project is one coherent pipeline system, with shared artifacts and 
 7. **Inference:** invoke saved models on new inputs through a reusable inference interface and inspect outputs.
 8. **Reliability:** cancellation, failure recovery, resource monitoring, clear errors, run manifests, and automated tests for complete example projects.
 
-These are completion goals, not claims that every stage is implemented today. The current branch now includes a complete first image-classification vertical slice for MNIST, in addition to DAG execution, local artifact references, basic data operations, a visual editor, and project save/open. This is not yet a general-purpose trainer; image/audio/text model training, durable model registry, complete experiment management, and robust task-specific preprocessing remain unfinished. The existing architecture compiler and causal-language-model training API are separate paths and are not falsely labelled as universal.
+These are completion goals, not claims that every stage is implemented today. The current branch now includes a complete first image-classification vertical slice for MNIST, in addition to DAG execution, local artifact references, basic data operations, a visual editor, and project save/open. This is not yet a general-purpose trainer; arbitrary image/audio/text model training, a searchable model registry, complete experiment management, and robust task-specific preprocessing remain unfinished. The existing architecture compiler and causal-language-model training API are separate paths and are not falsely labelled as universal.
 
 **Priority rule:** finish and verify the end-to-end ML pipeline lifecycle before expanding into robotics, ROS 2, simulation, or hardware integrations.
 

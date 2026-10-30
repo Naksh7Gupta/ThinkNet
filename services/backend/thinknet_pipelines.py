@@ -200,6 +200,9 @@ def _order(graph: PipelineGraph) -> tuple[list[PipelineNode], dict[str, list[Pip
     if len(ids) != len(set(ids)):
         raise ValueError("Pipeline node IDs must be unique.")
     by_id = {node.id: node for node in graph.nodes}
+    for node in graph.nodes:
+        if node.type not in COMPONENTS:
+            raise ValueError(f"Unknown or non-executable component '{node.type}'.")
     incoming: dict[str, list[PipelineEdge]] = defaultdict(list)
     outgoing: dict[str, list[str]] = defaultdict(list)
     degree = {node.id: 0 for node in graph.nodes}

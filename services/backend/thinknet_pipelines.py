@@ -269,6 +269,7 @@ def execute_pipeline(graph: PipelineGraph, seed: int = 42, *, on_node: Any = Non
             result = {"run_id": context["run_id"], "name": graph.name, "status": "cancelled",
                       "nodes": records, "outputs": values, "message": "Cancelled between components."}
             break
+        context["current_node_id"] = node.id
         component = COMPONENTS[node.type]
         inputs = {edge.target_port: values[edge.source][edge.source_port] for edge in incoming[node.id]}
         started = _now()
@@ -752,7 +753,7 @@ def _mnist_train(config: dict[str, Any], inputs: dict[str, Any], context: dict[s
         history.append({"epoch": epoch + 1, "loss": total_loss / seen, "accuracy": correct / seen})
         progress_callback = context.get("progress_callback")
         if progress_callback:
-            progress_callback("mnist_train", 100.0 * (epoch + 1) / epochs,
+            progress_callback(str(context.get("current_node_id", "mnist_train")), 100.0 * (epoch + 1) / epochs,
                               f"MNIST training epoch {epoch + 1}/{epochs}")
     model.to("cpu").eval()
     return {"model": model_ref, "metrics": {"dataset": "MNIST", "epochs": epochs,
@@ -947,7 +948,7 @@ def _llm_train_causal(config: dict[str, Any], _inputs: dict[str, Any], context: 
         job = get_training_job(job_id)
         progress_callback = context.get("progress_callback")
         if progress_callback:
-            progress_callback("llm_train", float(job.get("progress", 0.0)), str(job.get("message", "Training causal language model.")))
+            progress_callback(str(context.get("current_node_id", "llm_train")), float(job.get("progress", 0.0)), str(job.get("message", "Training causal language model.")))
         if job["status"] in {"completed", "failed", "cancelled"}:
             if job["status"] != "completed":
                 raise ValueError(f"Causal-LM job {job_id} {job['status']}: {job.get('error') or job.get('message')}")

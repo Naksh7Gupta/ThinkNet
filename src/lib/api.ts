@@ -25,6 +25,9 @@ import type {
   PipelineRun,
   PipelineProject,
   PipelineProjectList,
+  PipelineJob,
+  PipelineJobsResponse,
+  ExperimentRecord,
 } from "@/types/api";
 
 export const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
@@ -80,6 +83,23 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const api = {
   health: () => request<HealthResponse>("/health"),
+
+  startPipelineJob: (graph: PipelineGraph, seed = 42) =>
+    request<PipelineJob>("/api/v1/pipelines/jobs", {
+      method: "POST",
+      body: JSON.stringify({ graph, seed }),
+    }),
+  getPipelineJob: (jobId: string) =>
+    request<PipelineJob>(`/api/v1/pipelines/jobs/${encodeURIComponent(jobId)}`),
+  cancelPipelineJob: (jobId: string) =>
+    request<{ cancelled: boolean; job: PipelineJob }>(
+      `/api/v1/pipelines/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" },
+    ),
+  listPipelineJobs: () => request<PipelineJobsResponse>("/api/v1/pipelines/jobs"),
+  listExperiments: () =>
+    request<{ experiments: ExperimentRecord[] }>("/api/v1/pipelines/experiments"),
+  getExperiment: (runId: string) =>
+    request<ExperimentRecord>(`/api/v1/pipelines/experiments/${encodeURIComponent(runId)}`),
   listPipelineComponents: () =>
     request<PipelineComponentCatalog>("/api/v1/pipelines/components"),
   validatePipeline: (graph: PipelineGraph) =>

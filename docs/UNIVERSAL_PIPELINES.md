@@ -1,6 +1,8 @@
-# Universal pipeline foundation
+# ThinkNet end-to-end pipeline workspace
 
-ThinkNet now has a first executable, local-first data-pipeline path alongside its existing neural-architecture graph compiler.
+ThinkNet's primary engineering focus is now the complete, local-first ML project lifecycle. A pipeline is not just a diagram: it must take a user from raw data to a trained, evaluated, saved, reloadable, and invokable model, with reproducible runs and inspectable artifacts.
+
+This document separates what the current branch implements from the remaining work required to make that full lifecycle dependable. Robotics and ROS 2 are not part of this milestone and are deferred.
 
 ## Implemented in this milestone
 
@@ -73,7 +75,7 @@ Example request to `POST /api/v1/pipelines/run`:
 
 Use `dataset.select_xy` without `target_column` and connect only X when preparing unlabeled data.
 
-## Added in the expanded implementation
+## Current implementation in this branch
 
 The visual Pipeline Builder is available alongside Architecture Designer. It loads the backend component catalog, lets users add/connect nodes, edit node configuration JSON, validate and run the graph, and save/open local pipeline projects.
 
@@ -85,7 +87,6 @@ Additional local components:
 - `model.build_graph` and `model.import_weights`: compile a supplied ThinkNet graph or safely load a state-dict checkpoint with its matching graph.
 - `model.train_classifier`, `model.evaluate_classifier`, and `model.infer`: basic supervised numeric-tabular classification using the compiled model.
 - `multimodal.join`: inner-joins two modality datasets on a shared sample ID.
-- `robotics.ros2_jsonl`: ingests flattened ROS 2 telemetry exported as JSONL/NDJSON.
 - `model.train_classifier`, `model.evaluate_classifier`, and `model.infer`: basic supervised numeric-tabular classification using the compiled model.
 - `python.custom`: invokes a user-selected Python script with JSON input/output files and a 30-second timeout. The script must accept input and output file paths as its two command-line arguments; input JSON contains `rows`, `columns`, and `config`; it must write a JSON list of row objects to the output path. **Only run scripts you trust**: custom Python executes on the local machine with the backend user’s permissions.
 
@@ -97,15 +98,31 @@ Persistent projects are stored locally below `projects/pipelines` by default. Co
 - Text ingestion: `text.load → dataset.inspect`.
 - Image/audio ingestion: `image.folder` or `audio.wav_folder → dataset.inspect`.
 - Multimodal sample pairing: image/text/audio datasets with shared `sample_id` values → `multimodal.join`.
-- Robotics telemetry: `robotics.ros2_jsonl → dataset.inspect` for flattened ROS 2 exports.
 
-The image/audio nodes currently index files and labels; they do not yet decode, augment, batch, or train neural vision/audio models. Text ingestion currently creates document records; tokenizer, embedding, language-model training, and text evaluation adapters are still follow-up work. The multimodal join aligns records by sample ID but does not itself fuse neural embeddings. The robotics adapter reads recorded ROS 2 telemetry exports; it does not connect to live ROS 2 nodes, control robots, or deploy policies to hardware. Model handles currently live in backend memory during a run; durable model registry/checkpoint lifecycle is still future work. Remote GPU execution is intentionally out of scope for this PR.
+The image/audio nodes currently index files and labels; they do not yet decode, augment, batch, or train neural vision/audio models. Text ingestion currently creates document records; tokenizer, embedding, language-model training, and text evaluation adapters are still follow-up work. The multimodal join aligns records by sample ID but does not itself fuse neural embeddings. Model handles currently live in backend memory during a run; durable model registry/checkpoint lifecycle is still future work. Remote GPU execution is intentionally out of scope for this PR. Robotics and ROS 2 work is explicitly deferred; this branch will not expand those adapters.
 
-## Important boundaries
+## Full-project completion target
 
-This is the first vertical slice, not the complete universal ML product. The current data loader supports local CSV files up to 50 MiB. Data operations are currently tabular; image, audio, text dataset adapters, model build/import, general-purpose training/evaluation/inference components, custom Python components, visual pipeline editor, and remote GPU execution remain future milestones. The existing architecture compiler and causal-language-model training API are separate existing paths and have not been falsely re-labelled as universal.
+The intended project is one coherent pipeline system, with shared artifacts and execution semantics across these stages:
+
+1. **Project workspace:** create/open projects, persist graphs and settings, manage datasets, models, runs, and experiment history.
+2. **Data ingestion and preparation:** import tabular, text, image, and audio data; inspect schemas and samples; clean, transform, encode, tokenize, augment, batch, and split data without breaking X/Y or sample-ID alignment.
+3. **Model definition:** build models visually from ThinkNet graph components or import compatible pretrained models/checkpoints; validate tensor shapes and component compatibility.
+4. **Training:** configure task, loss, optimizer, scheduler, batch size, epochs, device, validation, checkpoints, and reproducible seeds; stream progress and logs without blocking the UI.
+5. **Evaluation:** run task-appropriate metrics on held-out data, inspect predictions/errors, and compare experiments.
+6. **Model lifecycle:** save durable checkpoints and metadata, reload models after restart, version artifacts, and export supported formats.
+7. **Inference:** invoke saved models on new inputs through a reusable inference interface and inspect outputs.
+8. **Reliability:** cancellation, failure recovery, resource monitoring, clear errors, run manifests, and automated tests for complete example projects.
+
+These are completion goals, not claims that every stage is implemented today. The current branch is an initial executable foundation: DAG execution, local artifact references, basic data operations, a visual editor, project save/open, and a limited numeric-tabular classifier path. The model workflow is not yet a general-purpose trainer; image/audio/text model training, durable model registry, complete experiment management, and robust task-specific preprocessing remain unfinished. The existing architecture compiler and causal-language-model training API are separate paths and are not falsely labelled as universal.
+
+**Priority rule:** finish and verify the end-to-end ML pipeline lifecycle before expanding into robotics, ROS 2, simulation, or hardware integrations.
 
 The artifact store is local to the backend machine. The default directory can be changed with `THINKNET_PIPELINE_ARTIFACT_DIR`. The local backend should only be exposed to trusted local clients; the current CSV loader intentionally reads the path selected by the user.
+
+## Verification status
+
+Tests have been added but must be executed locally/CI before this PR is considered complete. Do not treat a successful graph validation or one classifier run as proof that the full project lifecycle is finished.
 
 ## Tests
 

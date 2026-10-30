@@ -467,3 +467,188 @@ def delete_pipeline_project(project_id: str):
         return {"deleted": True, "project_id": project_id}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# Model components reuse ThinkNet's existing PyTorch graph compiler. They support
+# numeric supervised tabular workflows in this milestone; modality-specific tensor
+# transforms/trainers are intentionally not faked by the CSV path.
+def _compile_model(graph_spec: dict[str, Any]):
+    from services.backend.thinknet_backend_core import CompiledGraph, GraphDef, MODEL_STORE, validate_graph
+    graph = GraphDef.model_validate(graph_spec)
+    errors = validate_graph(graph)
+    if errors:
+        raise ValueError("Invalid model graph: " + "; ".join(errors))
+    model = CompiledGraph(graph)
+    model_id = uuid.uuid4().hex
+    MODEL_STORE[model_id] = model
+    return model_id, model
+
+
+def _model_build(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    graph_spec = config.get("graph")
+    if not isinstance(graph_spec, dict):
+        raise ValueError("Provide a ThinkNet graph object in the model.build_graph configuration.")
+    model_id, model = _compile_model(graph_spec)
+    return {"model": {"kind": "model_ref", "model_id": model_id,
+                      "graph": graph_spec, "parameter_count": sum(p.numel() for p in model.parameters())}}
+
+
+def _model_import(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    path = Path(str(config.get("weights_path", ""))).expanduser()
+    graph_spec = config.get("graph")
+    if not path.is_file() or not isinstance(graph_spec, dict):
+        raise ValueError("Model import requires an existing weights_path and its matching graph object.")
+    # weights_only avoids unpickling arbitrary Python objects from an untrusted checkpoint.
+    state = torch.load(path, map_location="cpu", weights_only=True)
+    if not isinstance(state, dict):
+        raise ValueError("Checkpoint must contain a PyTorch state_dict.")
+    model_id, model = _compile_model(graph_spec)
+    try:
+        model.load_state_dict(state, strict=True)
+    except Exception:
+        from services.backend.thinknet_backend_core import MODEL_STORE
+        MODEL_STORE.pop(model_id, None)
+        raise ValueError("Checkpoint tensors do not match the supplied graph.")
+    return {"model": {"kind": "model_ref", "model_id": model_id,
+                      "graph": graph_spec, "parameter_count": sum(p.numel() for p in model.parameters())}}
+
+
+def _get_model(ref: dict[str, Any]):
+    from services.backend.thinknet_backend_core import MODEL_STORE
+    if not isinstance(ref, dict) or ref.get("kind") != "model_ref":
+        raise ValueError("Expected a ThinkNet model reference.")
+    model = MODEL_STORE.get(str(ref.get("model_id", "")))
+    if model is None:
+        raise ValueError("Model handle expired; build or import the model again.")
+    return model
+
+
+def _numeric_xy(config: dict[str, Any], dataset_ref: dict[str, Any]):
+    import torch
+    rows, columns = _read_csv(dataset_ref)
+    features = config.get("feature_columns")
+    target = config.get("target_column")
+    if not isinstance(features, list) or not features or not isinstance(target, str):
+        raise ValueError("Set feature_columns (list) and target_column (string).")
+    if any(column not in columns for column in features + [target]):
+        raise ValueError("A selected feature or target column does not exist.")
+    try:
+        x = torch.tensor([[float(row[column]) for column in features] for row in rows], dtype=torch.float32)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("This trainer currently requires numeric feature columns; encode categorical data first.") from exc
+    labels = sorted({row[target] for row in rows})
+    label_map = {label: index for index, label in enumerate(labels)}
+    y = torch.tensor([label_map[row[target]] for row in rows], dtype=torch.long)
+    if len(labels) < 2:
+        raise ValueError("Classification requires at least two target classes.")
+    return x, y, labels
+
+
+def _model_train(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    import torch.nn.functional as F
+    model_ref = inputs["model"]
+    model = _get_model(model_ref)
+    x, y, labels = _numeric_xy(config, inputs["dataset"])
+    epochs = int(config.get("epochs", 5))
+    learning_rate = float(config.get("learning_rate", 1e-3))
+    if not 1 <= epochs <= 1000 or not 0 < learning_rate <= 1:
+        raise ValueError("epochs must be 1–1000 and learning_rate must be in (0, 1].")
+    model.train()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    history = []
+    for epoch in range(epochs):
+        optimizer.zero_grad(set_to_none=True)
+        logits = model(x)
+        if isinstance(logits, tuple):
+            logits = logits[0]
+        if logits.ndim != 2 or logits.shape[0] != y.shape[0] or logits.shape[1] != len(labels):
+            raise ValueError(f"Model output must be [rows, {len(labels)}] class logits.")
+        loss = F.cross_entropy(logits, y)
+        loss.backward()
+        optimizer.step()
+        history.append({"epoch": epoch + 1, "loss": float(loss.detach())})
+    model.eval()
+    return {"model": model_ref, "metrics": {"training_loss": history[-1]["loss"],
+            "epochs": epochs, "history": history, "classes": labels}}
+
+
+def _model_evaluate(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    import torch.nn.functional as F
+    model = _get_model(inputs["model"]).eval()
+    x, y, labels = _numeric_xy(config, inputs["dataset"])
+    with torch.no_grad():
+        logits = model(x)
+        if isinstance(logits, tuple):
+            logits = logits[0]
+        if logits.ndim != 2 or logits.shape[1] != len(labels):
+            raise ValueError("Model output class count does not match the dataset target classes.")
+        predictions = logits.argmax(dim=1)
+        accuracy = float((predictions == y).float().mean())
+        loss = float(F.cross_entropy(logits, y))
+    return {"report": {"accuracy": accuracy, "loss": loss, "rows": len(y),
+                       "classes": labels, "correct": int((predictions == y).sum())}}
+
+
+def _model_infer(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import torch
+    model = _get_model(inputs["model"]).eval()
+    rows = config.get("inputs")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("Provide a non-empty numeric 2D inputs array in the inference node configuration.")
+    try:
+        tensor = torch.tensor(rows, dtype=torch.float32)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Inference inputs must be a numeric 2D array.") from exc
+    with torch.no_grad():
+        output = model(tensor)
+        if isinstance(output, tuple):
+            output = output[0]
+    return {"predictions": {"values": output.detach().cpu().tolist()}}
+
+
+def _custom_python(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import subprocess
+    import sys
+    import tempfile
+    script = Path(str(config.get("script_path", ""))).expanduser()
+    if not script.is_file() or script.suffix.lower() != ".py":
+        raise ValueError("Choose an existing trusted .py script.")
+    rows, columns = _read_csv(inputs["dataset"])
+    ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="thinknet-custom-") as folder:
+        source = Path(folder) / "input.json"
+        destination = Path(folder) / "output.json"
+        source.write_text(json.dumps({"rows": rows, "columns": columns,
+                                      "config": config.get("parameters", {})}), encoding="utf-8")
+        try:
+            subprocess.run([sys.executable, str(script), str(source), str(destination)],
+                           check=True, capture_output=True, text=True, timeout=30,
+                           cwd=str(script.parent))
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError("Custom component exceeded the 30-second execution limit.") from exc
+        except subprocess.CalledProcessError as exc:
+            raise ValueError(f"Custom component failed: {exc.stderr[-1500:]}") from exc
+        if not destination.is_file() or destination.stat().st_size > MAX_CSV_BYTES:
+            raise ValueError("Custom component must write a JSON list of rows (maximum 50 MiB).")
+        result = json.loads(destination.read_text(encoding="utf-8"))
+    if not isinstance(result, list) or not all(isinstance(row, dict) for row in result):
+        raise ValueError("Custom component output must be a JSON list of row objects.")
+    out_columns = list(result[0]) if result else columns
+    return {"dataset": _write_csv(result, out_columns)}
+
+
+COMPONENTS.update({
+    "model.build_graph": {"inputs": {}, "outputs": {"model": "model_ref"}, "run": _model_build},
+    "model.import_weights": {"inputs": {}, "outputs": {"model": "model_ref"}, "run": _model_import},
+    "model.train_classifier": {"inputs": {"model": "model_ref", "dataset": "dataset_ref"}, "outputs": {
+        "model": "model_ref", "metrics": "metadata"}, "run": _model_train},
+    "model.evaluate_classifier": {"inputs": {"model": "model_ref", "dataset": "dataset_ref"}, "outputs": {
+        "report": "metadata"}, "run": _model_evaluate},
+    "model.infer": {"inputs": {"model": "model_ref"}, "outputs": {
+        "predictions": "metadata"}, "run": _model_infer},
+    "python.custom": {"inputs": {"dataset": "dataset_ref"}, "outputs": {
+        "dataset": "dataset_ref"}, "run": _custom_python},
+})

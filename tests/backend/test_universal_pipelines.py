@@ -46,6 +46,9 @@ def test_catalog_exposes_core_pipeline_components():
         "llm.train_causal",
         "llm.generate",
         "text.tfidf_split",
+        "torch.fit",
+        "torch.evaluate",
+        "torch.predict",
     } <= names
 
 

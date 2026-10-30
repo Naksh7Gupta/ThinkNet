@@ -119,3 +119,12 @@ The response contains `filename`, `python_source`, and graph counts. Save the re
 The graph compiler now has tested execution paths for batch-first multi-head self-attention (causal and non-causal), a pre-norm transformer block, feed-forward/MLP, SwiGLU, learned and sinusoidal positional embeddings, and LayerScale. The CPU tests run each node on a real tensor and check shape and finite outputs. This does not imply that every node shown in the catalog is executable; check each node's `status` field.
 
 The export endpoint is also tested by parsing and executing the generated Python, building the exported model, and running a forward pass. The current export still depends on ThinkNet's backend package and does not include trained weights; it is not yet a self-contained, standalone file.
+
+
+## Universal pipeline capabilities
+
+ThinkNet's Pipeline Builder uses one typed DAG execution engine across task adapters. Current task examples include text classification (train-only TF-IDF + scikit-learn), tabular classification/regression, clustering, a PyTorch MNIST workflow, and causal language-model training using the existing managed trainer.
+
+Long-running visual pipelines can run as background jobs with status polling and cooperative cancellation. Completed runs persist graph snapshots, seeds, node results and metrics in a local experiment history. The builder includes starter templates for sentiment/spam, tabular classification, regression, clustering, causal LLM training and MNIST.
+
+See [Universal Pipelines](UNIVERSAL_PIPELINES.md) for component contracts, API endpoints, configuration, limitations and verification steps.

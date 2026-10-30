@@ -40,6 +40,7 @@ export function PipelineWorkspace() {
   const client = useQueryClient();
   const catalog = useQuery({ queryKey: ["pipeline-components"], queryFn: api.listPipelineComponents });
   const projects = useQuery({ queryKey: ["pipeline-projects"], queryFn: api.listPipelineProjects });
+  const experiments = useQuery({ queryKey: ["pipeline-experiments"], queryFn: api.listExperiments });
   const [name, setName] = useState("untitled-pipeline");
   const [projectId, setProjectId] = useState("untitled-pipeline");
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
@@ -358,6 +359,16 @@ export function PipelineWorkspace() {
     }
   };
 
+  const openExperiment = async (runId: string) => {
+    try {
+      const experiment = await api.getExperiment(runId);
+      setNotice(`Experiment ${experiment.name} · ${experiment.status} · seed ${experiment.seed ?? "—"} · ${experiment.nodes?.length ?? 0} components`);
+      setError(experiment.error ?? "");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not load experiment.");
+    }
+  };
+
   const applyConfig = () => {
     if (!selectedNode) return;
     try {
@@ -393,6 +404,10 @@ export function PipelineWorkspace() {
           <option value="regression">Regression</option>
           <option value="clustering">Clustering</option>
           <option value="llm">Causal LLM training</option>
+        </select>
+        <select aria-label="Open experiment history" className="h-9 max-w-48 rounded-md border border-border bg-card px-2 text-sm" defaultValue="" onChange={(event) => { if (event.target.value) void openExperiment(event.target.value); event.target.value = ""; }}>
+          <option value="">Experiments…</option>
+          {(experiments.data?.experiments ?? []).map((experiment) => <option key={experiment.run_id} value={experiment.run_id}>{experiment.name} · {experiment.status}</option>)}
         </select>
         <Button variant="secondary" onClick={loadMnistStarter}><Sparkles className="h-4 w-4" /> MNIST starter</Button>
         <Button variant="secondary" onClick={() => save.mutate()} disabled={save.isPending}><Save className="h-4 w-4" /> Save</Button>
@@ -445,7 +460,7 @@ export function PipelineWorkspace() {
       </div>
       {activeJob.data && <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
         <span className="font-medium">{activeJob.data.status.toUpperCase()}</span>
-        {activeJob.data.current_node ? ` · ${activeJob.data.current_node}` : ""}
+        {activeJob.data.current_node ? ` · ${activeJob.data.current_node}` : ""}{activeJob.data.status === "running" ? ` · ${Math.round(activeJob.data.progress)}%` : ""}
         {activeJob.data.message ? ` · ${activeJob.data.message}` : ""}
         {activeJob.data.nodes.length ? ` · ${activeJob.data.nodes.filter((node) => node.status === "completed").length}/${activeJob.data.nodes.length} components complete` : ""}
       </div>}

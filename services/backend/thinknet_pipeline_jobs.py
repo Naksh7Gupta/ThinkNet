@@ -65,11 +65,22 @@ def _execute(job_id: str, graph: PipelineGraph, seed: int, cancel: threading.Eve
             else:
                 nodes[existing] = record
             job.update(nodes=nodes, current_node=record["node_id"],
-                       progress=round(100 * sum(1 for item in nodes if item["status"] == "completed") / max(1, job.get("total_nodes", 1)), 2),
+                       progress=round(100 * (sum(1 for item in nodes if item["status"] == "completed") + (0 if record["status"] != "running" else float(job.get("component_progress", 0.0)) / 100)) / max(1, job.get("total_nodes", 1)), 2),
                        message=f"{record['status'].capitalize()}: {record['node_id']}",
                        updated_at=_now())
+    def progress_update(node_id: str, component_progress: float, message: str) -> None:
+        with _LOCK:
+            job = _JOBS.get(job_id)
+            if not job:
+                return
+            completed = sum(1 for item in job.get("nodes", []) if item["status"] == "completed")
+            total = max(1, job.get("total_nodes", 1))
+            job.update(current_node=node_id,
+                       component_progress=max(0.0, min(100.0, component_progress)),
+                       progress=round(100 * (completed + max(0.0, min(100.0, component_progress)) / 100) / total, 2),
+                       message=message, updated_at=_now())
     try:
-        result = execute_pipeline(graph, seed, on_node=node_update, cancel_event=cancel)
+        result = execute_pipeline(graph, seed, on_node=node_update, on_progress=progress_update, cancel_event=cancel)
         result["experiment"] = {
             "run_id": result["run_id"],
             "name": result["name"],

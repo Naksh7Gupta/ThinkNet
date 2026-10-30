@@ -258,42 +258,45 @@ def _order(graph: PipelineGraph) -> tuple[list[PipelineNode], dict[str, list[Pip
     return ordered, incoming
 
 
-def execute_pipeline(graph: PipelineGraph, seed: int = 42) -> dict[str, Any]:
+def execute_pipeline(graph: PipelineGraph, seed: int = 42, *, on_node: Any = None, cancel_event: Any = None) -> dict[str, Any]:
     ordered, incoming = _order(graph)
-    context = {"seed": int(seed), "run_id": uuid.uuid4().hex}
+    context = {"seed": int(seed), "run_id": uuid.uuid4().hex, "cancel_event": cancel_event}
     values: dict[str, dict[str, Any]] = {}
     records: list[dict[str, Any]] = []
+    result: dict[str, Any]
     for node in ordered:
+        if cancel_event is not None and cancel_event.is_set():
+            result = {"run_id": context["run_id"], "name": graph.name, "status": "cancelled",
+                      "nodes": records, "outputs": values, "message": "Cancelled between components."}
+            break
         component = COMPONENTS[node.type]
-        inputs = {
-            edge.target_port: values[edge.source][edge.source_port]
-            for edge in incoming[node.id]
-        }
+        inputs = {edge.target_port: values[edge.source][edge.source_port] for edge in incoming[node.id]}
         started = _now()
+        if on_node:
+            on_node({"node_id": node.id, "type": node.type, "status": "running", "started_at": started})
         try:
             outputs = component["run"](node.config, inputs, context)
             missing_outputs = set(outputs) - set(component["outputs"])
             if missing_outputs:
                 raise ValueError(f"Component returned undeclared output(s): {', '.join(sorted(missing_outputs))}.")
             values[node.id] = outputs
-            records.append({"node_id": node.id, "type": node.type, "status": "completed",
-                            "started_at": started, "finished_at": _now()})
+            record = {"node_id": node.id, "type": node.type, "status": "completed", "started_at": started, "finished_at": _now()}
+            records.append(record)
+            if on_node:
+                on_node(record)
         except Exception as exc:
-            records.append({"node_id": node.id, "type": node.type, "status": "failed",
-                            "started_at": started, "finished_at": _now(), "error": str(exc)})
-            failure = {"run_id": context["run_id"], "name": graph.name, "status": "failed",
-                       "nodes": records, "error": f"Node '{node.id}' failed: {exc}"}
-            ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
-            (ARTIFACT_ROOT / f"run-{context['run_id']}.json").write_text(
-                json.dumps(failure, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            failure["run_record"] = f"run-{context['run_id']}.json"
-            return failure
+            record = {"node_id": node.id, "type": node.type, "status": "failed", "started_at": started, "finished_at": _now(), "error": str(exc)}
+            records.append(record)
+            if on_node:
+                on_node(record)
+            result = {"run_id": context["run_id"], "name": graph.name, "status": "failed",
+                      "nodes": records, "outputs": values, "error": f"Node '{node.id}' failed: {exc}"}
+            break
+    else:
+        result = {"run_id": context["run_id"], "name": graph.name, "status": "completed", "nodes": records, "outputs": values}
     ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
-    result = {"run_id": context["run_id"], "name": graph.name, "status": "completed",
-              "nodes": records, "outputs": values}
     run_path = ARTIFACT_ROOT / f"run-{context['run_id']}.json"
-    run_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    run_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     result["run_record"] = run_path.name
     return result
 

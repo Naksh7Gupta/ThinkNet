@@ -841,7 +841,8 @@ def _model_save(_config: dict[str, Any], inputs: dict[str, Any], _context: dict[
     checkpoint_id = uuid.uuid4().hex
     MODEL_ROOT.mkdir(parents=True, exist_ok=True)
     path = _model_checkpoint_path(checkpoint_id)
-    torch.save({"graph": graph_spec, "state_dict": model.state_dict()}, path)
+    torch.save({"graph": graph_spec, "state_dict": model.state_dict(),
+                "metadata": {key: model_ref[key] for key in ("task", "classes", "feature_columns") if key in model_ref}}, path)
     return {"model": {**model_ref, "checkpoint_id": checkpoint_id,
                       "checkpoint_path": str(path), "saved": True}}
 
@@ -855,14 +856,15 @@ def _model_load(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[
     try:
         payload = torch.load(path, map_location="cpu", weights_only=True)
         graph_spec, state = payload["graph"], payload["state_dict"]
-        if not isinstance(graph_spec, dict) or not isinstance(state, dict):
+        metadata = payload.get("metadata", {})
+        if not isinstance(graph_spec, dict) or not isinstance(state, dict) or not isinstance(metadata, dict):
             raise ValueError("Checkpoint metadata is invalid.")
         model_id, model = _compile_model(graph_spec)
         model.load_state_dict(state, strict=True)
         model.eval()
     except Exception as exc:
         raise ValueError(f"Could not restore saved model: {exc}") from exc
-    return {"model": {"kind": "model_ref", "model_id": model_id, "graph": graph_spec,
+    return {"model": {"kind": "model_ref", "model_id": model_id, "graph": graph_spec, **metadata,
                       "parameter_count": sum(p.numel() for p in model.parameters()),
                       "checkpoint_id": checkpoint_id, "saved": True}}
 

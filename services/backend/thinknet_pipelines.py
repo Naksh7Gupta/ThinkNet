@@ -258,9 +258,9 @@ def _order(graph: PipelineGraph) -> tuple[list[PipelineNode], dict[str, list[Pip
     return ordered, incoming
 
 
-def execute_pipeline(graph: PipelineGraph, seed: int = 42, *, on_node: Any = None, cancel_event: Any = None) -> dict[str, Any]:
+def execute_pipeline(graph: PipelineGraph, seed: int = 42, *, on_node: Any = None, on_progress: Any = None, cancel_event: Any = None) -> dict[str, Any]:
     ordered, incoming = _order(graph)
-    context = {"seed": int(seed), "run_id": uuid.uuid4().hex, "cancel_event": cancel_event}
+    context = {"seed": int(seed), "run_id": uuid.uuid4().hex, "cancel_event": cancel_event, "progress_callback": on_progress}
     values: dict[str, dict[str, Any]] = {}
     records: list[dict[str, Any]] = []
     result: dict[str, Any]
@@ -933,6 +933,9 @@ def _llm_train_causal(config: dict[str, Any], _inputs: dict[str, Any], context: 
             cancel_training_job(job_id)
             raise ValueError(f"Pipeline cancelled; causal-LM training job {job_id} was asked to stop.")
         job = get_training_job(job_id)
+        progress_callback = context.get("progress_callback")
+        if progress_callback:
+            progress_callback("llm_train", float(job.get("progress", 0.0)), str(job.get("message", "Training causal language model.")))
         if job["status"] in {"completed", "failed", "cancelled"}:
             if job["status"] != "completed":
                 raise ValueError(f"Causal-LM job {job_id} {job['status']}: {job.get('error') or job.get('message')}")

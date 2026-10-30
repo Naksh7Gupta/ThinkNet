@@ -241,7 +241,7 @@ For text classification, use `text.tfidf_split` after the paired train/test spli
 - `GET /api/v1/pipelines/jobs` lists active jobs and recent history.
 - `GET /api/v1/pipelines/jobs/{job_id}` returns status, current component, progress and result.
 - `POST /api/v1/pipelines/jobs/{job_id}/cancel` requests cooperative cancellation.
-- The local backend runs up to two pipeline jobs concurrently in worker threads. Individual components run in that worker; the UI stays responsive. Cancellation is checked between components; the MNIST trainer checks between minibatches, and the LLM adapter forwards cancellation to its managed training job. Other components already in progress may need to finish before the pipeline stops.
+- The local backend runs one pipeline job at a time by default to protect local resources. Set `THINKNET_PIPELINE_WORKERS=2` to opt into two concurrent workers. Individual components run in that worker; the UI stays responsive. Cancellation is checked between components; the MNIST trainer checks between minibatches, and the LLM adapter forwards cancellation to its managed training job. Other components already in progress may need to finish before the pipeline stops.
 - Active worker state is process-local and is lost if the backend exits; completed experiment records persist locally.
 
 ### Experiment tracking

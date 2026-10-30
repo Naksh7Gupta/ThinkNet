@@ -95,7 +95,7 @@ Persistent projects are stored locally below `projects/pipelines` by default. Co
 
 ## Current component examples
 
-- Tabular classification: `csv.load → dataset.select_xy → dataset.split_xy → model.build_graph → model.train_classifier → model.evaluate_classifier`.
+- Tabular classification/regression can use either the scikit-learn `ml.*` adapters or a user-built PyTorch MLP with `model.build_graph → torch.fit → torch.evaluate → torch.predict → model.save`.
 - Text ingestion: `text.load → dataset.inspect`.
 - Image/audio ingestion: `image.folder` or `audio.wav_folder → dataset.inspect`.
 - Multimodal sample pairing: image/text/audio datasets with shared `sample_id` values → `multimodal.join`.
@@ -187,7 +187,8 @@ the adapters interpret task configuration and select an appropriate estimator.
 - `text.tfidf`: converts a text column into numeric TF-IDF features. Configure
   `text_column`, `label_column`, and `max_features`. It preserves the label
   column when present.
-- `ml.fit`: fits a classification, regression, or clustering estimator.
+- `ml.fit`: fits a scikit-learn classification, regression, or clustering estimator.
+- `torch.fit`, `torch.evaluate`, and `torch.predict`: train and evaluate a user-built ThinkNet/PyTorch graph for numeric tabular classification or regression, with minibatches, AdamW/SGD, cancellation checks, progress callbacks and task-aware metrics. The graph output width must equal the number of classes for classification, or one for regression. `model.save` preserves task labels and feature-column metadata.
   Connect feature data to `X`; connect one-column targets to optional `Y`
   for classification/regression. Supported estimator choices:
   - classification: `logistic_regression`, `random_forest`

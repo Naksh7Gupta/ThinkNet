@@ -303,7 +303,7 @@ export type PipelineRun = {
   nodes: Array<{
     node_id: string;
     type: string;
-    status: "running" | "completed" | "failed";
+    status: "running" | "completed" | "failed" | "cancelled";
     started_at: string;
     finished_at: string;
     error?: string;

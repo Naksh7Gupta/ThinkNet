@@ -141,3 +141,55 @@ def test_split_rejects_misaligned_xy(artifact_root):
     y_ref = pipelines._write_csv([{"y": "1"}], ["y"])
     with pytest.raises(ValueError, match="row counts differ"):
         pipelines._split_xy({}, {"X": x_ref, "Y": y_ref}, {"seed": 1})
+
+
+def test_text_loader_creates_document_dataset(tmp_path, artifact_root):
+    source = tmp_path / "notes.txt"
+    source.write_text("first sentence\n\nsecond sentence", encoding="utf-8")
+    result = pipelines._load_text({"path": str(source)}, {}, {})
+    rows, columns = pipelines._read_csv(result["dataset"])
+    assert columns == ["text", "label"]
+    assert [row["text"] for row in rows] == ["first sentence", "second sentence"]
+    assert result["metadata"]["modality"] == "text"
+
+
+def test_image_folder_loader_uses_class_subfolders(tmp_path, artifact_root):
+    class_dir = tmp_path / "cats"
+    class_dir.mkdir()
+    (class_dir / "one.png").write_bytes(b"image-placeholder")
+    result = pipelines._load_image_folder({"path": str(tmp_path)}, {}, {})
+    rows, _ = pipelines._read_csv(result["dataset"])
+    assert rows[0]["label"] == "cats"
+    assert rows[0]["path"].endswith("one.png")
+
+
+def test_audio_loader_reads_wav_metadata(tmp_path, artifact_root):
+    import wave
+    import struct
+
+    class_dir = tmp_path / "beeps"
+    class_dir.mkdir()
+    path = class_dir / "tone.wav"
+    with wave.open(str(path), "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(8000)
+        audio.writeframes(struct.pack("<h", 0) * 8000)
+    result = pipelines._load_audio_folder({"path": str(tmp_path)}, {}, {})
+    rows, _ = pipelines._read_csv(result["dataset"])
+    assert rows[0]["label"] == "beeps"
+    assert float(rows[0]["duration_seconds"]) == 1.0
+
+
+def test_project_save_load_and_delete(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipelines, "PROJECT_ROOT", tmp_path)
+    graph = pipelines.PipelineGraph(
+        name="saved",
+        nodes=[{"id": "load", "type": "csv.load", "config": {"path": "data.csv"}}],
+    )
+    project = pipelines.PipelineProject(project_id="demo", name="Demo", graph=graph)
+    saved = pipelines.save_pipeline_project("demo", project)
+    assert saved["project_id"] == "demo"
+    assert pipelines.get_pipeline_project("demo")["name"] == "Demo"
+    assert pipelines.list_pipeline_projects()["projects"][0]["project_id"] == "demo"
+    assert pipelines.delete_pipeline_project("demo")["deleted"] is True

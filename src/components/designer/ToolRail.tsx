@@ -1,5 +1,5 @@
 import { useReactFlow } from "@xyflow/react";
-import { CirclePlus, FolderOpen, PanelRight, ScanLine, Trash2 } from "lucide-react";
+import { Calculator, CirclePlus, FolderOpen, PanelRight, ScanLine, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDesignerStore } from "@/store/designer-store";
 
@@ -38,6 +38,8 @@ export function ToolRail({
   onToggleLibrary,
   assetsOpen,
   onToggleAssets,
+  estimatorOpen,
+  onToggleEstimator,
   panelOpen,
   onTogglePanel,
 }: {
@@ -45,6 +47,8 @@ export function ToolRail({
   onToggleLibrary: () => void;
   assetsOpen: boolean;
   onToggleAssets: () => void;
+  estimatorOpen: boolean;
+  onToggleEstimator: () => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
 }) {
@@ -61,6 +65,9 @@ export function ToolRail({
       </RailButton>
       <RailButton label="Assets" active={assetsOpen} onClick={onToggleAssets}>
         <FolderOpen className="h-5 w-5" />
+      </RailButton>
+      <RailButton label="Compute Estimator" active={estimatorOpen} onClick={onToggleEstimator}>
+        <Calculator className="h-5 w-5" />
       </RailButton>
       <RailButton label="Fit graph to view" onClick={() => void fitView({ padding: 0.24, duration: 180 })}>
         <ScanLine className="h-5 w-5" />

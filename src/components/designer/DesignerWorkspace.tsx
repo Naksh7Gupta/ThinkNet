@@ -3,6 +3,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AssetsPanel } from "@/components/designer/AssetsPanel";
+import { ComputeEstimatorPanel } from "@/components/designer/ComputeEstimatorPanel";
 import { DesignerCanvas } from "@/components/designer/DesignerCanvas";
 import { DesignerToolbar } from "@/components/designer/DesignerToolbar";
 import { IssuesPanel } from "@/components/designer/IssuesPanel";
@@ -18,6 +19,7 @@ export function DesignerWorkspace() {
   const searchRef = useRef<HTMLInputElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [assetsOpen, setAssetsOpen] = useState(false);
+  const [estimatorOpen, setEstimatorOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const catalog = useQuery({ queryKey: ["nodes"], queryFn: api.listNodes });
   const architectures = useQuery({ queryKey: ["architectures"], queryFn: api.listArchitectures });
@@ -33,6 +35,7 @@ export function DesignerWorkspace() {
       if (event.key === "Escape") {
         setLibraryOpen(false);
         setAssetsOpen(false);
+        setEstimatorOpen(false);
         return;
       }
       if (!event.shiftKey || event.key.toLowerCase() !== "a") return;
@@ -41,6 +44,7 @@ export function DesignerWorkspace() {
       event.preventDefault();
       setLibraryOpen(true);
       setAssetsOpen(false);
+      setEstimatorOpen(false);
       requestAnimationFrame(() => searchRef.current?.focus());
     }
     window.addEventListener("keydown", onKeyDown);
@@ -60,6 +64,13 @@ export function DesignerWorkspace() {
           onToggleAssets={() => {
             setAssetsOpen((value) => !value);
             setLibraryOpen(false);
+            setEstimatorOpen(false);
+          }}
+          estimatorOpen={estimatorOpen}
+          onToggleEstimator={() => {
+            setEstimatorOpen((value) => !value);
+            setLibraryOpen(false);
+            setAssetsOpen(false);
           }}
           panelOpen={panelOpen}
           onTogglePanel={() => setPanelOpen((v) => !v)}
@@ -105,6 +116,19 @@ export function DesignerWorkspace() {
                   <X className="h-4 w-4" />
                 </button>
                 <AssetsPanel />
+              </aside>
+            )}
+            {estimatorOpen && (
+              <aside className="absolute bottom-3 left-3 top-3 z-20 w-[300px] overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+                <button
+                  type="button"
+                  aria-label="Close Compute Estimator"
+                  onClick={() => setEstimatorOpen(false)}
+                  className="absolute right-2 top-2 z-10 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <ComputeEstimatorPanel />
               </aside>
             )}
           </div>

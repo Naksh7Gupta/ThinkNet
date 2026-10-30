@@ -193,3 +193,29 @@ def test_project_save_load_and_delete(tmp_path, monkeypatch):
     assert pipelines.get_pipeline_project("demo")["name"] == "Demo"
     assert pipelines.list_pipeline_projects()["projects"][0]["project_id"] == "demo"
     assert pipelines.delete_pipeline_project("demo")["deleted"] is True
+
+
+def test_multimodal_join_matches_shared_sample_ids(artifact_root):
+    left = pipelines._write_csv(
+        [{"sample_id": "a", "image_path": "a.png"}, {"sample_id": "b", "image_path": "b.png"}],
+        ["sample_id", "image_path"],
+    )
+    right = pipelines._write_csv(
+        [{"sample_id": "b", "text": "second"}, {"sample_id": "a", "text": "first"}],
+        ["sample_id", "text"],
+    )
+    result = pipelines._multimodal_join({"key": "sample_id"}, {"left": left, "right": right}, {})
+    rows, _ = pipelines._read_csv(result["dataset"])
+    assert result["metadata"]["matched_samples"] == 2
+    assert rows[0]["text"] == "first"
+    assert rows[1]["text"] == "second"
+
+
+def test_robotics_jsonl_adapter_reads_flattened_records(tmp_path, artifact_root):
+    source = tmp_path / "telemetry.jsonl"
+    source.write_text('{"timestamp": 1, "linear_x": 0.4}\\n{"timestamp": 2, "linear_x": 0.5}', encoding="utf-8")
+    result = pipelines._robotics_jsonl({"path": str(source)}, {}, {})
+    rows, columns = pipelines._read_csv(result["dataset"])
+    assert "sample_id" in columns
+    assert len(rows) == 2
+    assert result["metadata"]["modality"] == "robotics"

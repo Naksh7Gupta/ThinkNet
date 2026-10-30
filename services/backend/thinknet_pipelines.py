@@ -983,6 +983,28 @@ def _llm_train_causal(config: dict[str, Any], _inputs: dict[str, Any], context: 
     raise ValueError(f"Causal-LM training job {job_id} exceeded max_wait_seconds and was cancelled.")
 
 
+def _llm_load(config: dict[str, Any], _inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
+    import re
+    from services.backend.thinknet_training_jobs import JOB_ROOT
+
+    job_id = str(config.get("job_id", ""))
+    if not re.fullmatch(r"[0-9a-f]{12}", job_id):
+        raise ValueError("Provide a valid saved causal-LM training job ID.")
+    output = JOB_ROOT / job_id
+    required = [output / "manifest.json", output / "graph.json",
+                output / "training.json", output / "model_state_dict.pt",
+                output / "tokenizer"]
+    if not all(path.exists() for path in required):
+        raise ValueError(f"Saved causal-LM artifacts for job '{job_id}' are incomplete or missing.")
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    if manifest.get("task") != "causal_language_modeling":
+        raise ValueError("The selected training artifact is not a causal language model.")
+    return {"model": {"kind": "llm_model_ref", "job_id": job_id,
+                      "task": "causal_language_modeling", "artifact_dir": str(output),
+                      "manifest": {key: manifest.get(key) for key in
+                                   ("steps_completed", "parameter_count", "vocabulary_size", "device")}}}
+
+
 def _llm_generate(config: dict[str, Any], inputs: dict[str, Any], _context: dict[str, Any]) -> dict[str, Any]:
     import re
     import torch
@@ -1044,6 +1066,7 @@ def _llm_generate(config: dict[str, Any], inputs: dict[str, Any], _context: dict
 COMPONENTS.update({
     "llm.train_causal": {"inputs": {}, "outputs": {"model": "llm_model_ref", "metrics": "metadata"},
                          "run": _llm_train_causal},
+    "llm.load": {"inputs": {}, "outputs": {"model": "llm_model_ref"}, "run": _llm_load},
     "llm.generate": {"inputs": {"model": "llm_model_ref"}, "outputs": {"predictions": "metadata"},
                      "run": _llm_generate},
 })

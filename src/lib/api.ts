@@ -23,6 +23,8 @@ import type {
   PipelineComponentCatalog,
   PipelineValidation,
   PipelineRun,
+  PipelineProject,
+  PipelineProjectList,
 } from "@/types/api";
 
 export const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
@@ -90,6 +92,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ graph, seed }),
     }),
+  listPipelineProjects: () =>
+    request<PipelineProjectList>("/api/v1/pipelines/projects"),
+  getPipelineProject: (projectId: string) =>
+    request<PipelineProject>(`/api/v1/pipelines/projects/${encodeURIComponent(projectId)}`),
+  savePipelineProject: (project: PipelineProject) =>
+    request<PipelineProject>(`/api/v1/pipelines/projects/${encodeURIComponent(project.project_id)}`, {
+      method: "PUT",
+      body: JSON.stringify(project),
+    }),
+  deletePipelineProject: (projectId: string) =>
+    request<{ deleted: boolean; project_id: string }>(
+      `/api/v1/pipelines/projects/${encodeURIComponent(projectId)}`,
+      { method: "DELETE" },
+    ),
   listNodes: () => request<NodeCatalogResponse>("/api/v1/nodes"),
   listArchitectures: () => request<ArchitectureCatalogResponse>("/api/v1/architectures"),
   validateGraph: (graph: GraphDef) =>

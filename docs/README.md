@@ -32,7 +32,7 @@ The source file is standalone at `services/backend/thinknet_backend_core.py`; ru
 - `GET /api/v1/nodes` — node catalog for the GUI's "+" menus
 - `POST /api/v1/graphs/validate` — validate graph structure/configuration
 - `POST /api/v1/graphs/infer-shapes` — best-effort shape preview
-- `GET /api/v1/pipelines/components`, `POST /api/v1/pipelines/validate`, `POST /api/v1/pipelines/run` — reusable local data-pipeline foundation; see [UNIVERSAL_PIPELINES.md](./UNIVERSAL_PIPELINES.md).
+- `GET /api/v1/pipelines/components`, `POST /api/v1/pipelines/validate`, `POST /api/v1/pipelines/run` — reusable local pipeline execution, including MNIST image-classification training, evaluation, prediction, and model checkpoint save/load; see [UNIVERSAL_PIPELINES.md](./UNIVERSAL_PIPELINES.md).
 - `POST /api/v1/models/compile` — compile a graph and return a process-local `model_id`
 - `POST /api/v1/models/quantize` — create a new model handle from an existing compiled model using the selected dtype
 - `GET /api/v1/models/{model_id}` — inspect a stored model handle
@@ -78,7 +78,7 @@ Connect an `Input` node to the `Architecture` node and then to an `Output` node.
 - `POST /api/v1/models/compile` validates and compiles supported graph definitions.
 - The architecture integration tests execute all four presets through `CompiledGraph` on CPU.
 
-This is graph-level execution integration; it does not yet provide a persistent model registry, training-job API, dataset pipeline, or full visual-node implementation.
+This is graph-level execution integration. The pipeline API now provides a first complete MNIST image-classification workflow and durable local checkpoint save/load; it is not yet a universal task-agnostic training system.
 
 ## Model quantization node
 
@@ -96,7 +96,7 @@ Every entry from `GET /api/v1/nodes` now includes a category color and concrete 
 
 ## Scope and limitations
 
-The node catalog includes a `status` field for every entry: `implemented-and-tested`, `partial`, or `metadata-only`. The compiler supports Input/Output, Linear/AutoLinear, Embedding/TokenEmbedding, LayerNorm/RMSNorm, BatchNorm1d, Dropout, common activations, Flatten/Reshape, Conv2d/MaxPool2d/GlobalAveragePool, Add/Multiply/ResidualAdd/Concat, Identity, MultiHeadAttention, CausalSelfAttention, PreNormTransformerBlock, MLP/FeedForward, SwiGLU, learned and sinusoidal position embeddings, LayerScale, and the four reference architectures through an Architecture node. A `partial` status means an execution path exists but broader acceptance coverage is still needed; metadata-only entries must not be treated as executable. Port typing, broader operator coverage (including advanced attention variants), a fully standalone export, stronger schema validation, and a complete training workflow remain follow-up work.
+The node catalog includes a `status` field for every entry: `implemented-and-tested`, `partial`, or `metadata-only`. The compiler supports Input/Output, Linear/AutoLinear, Embedding/TokenEmbedding, LayerNorm/RMSNorm, BatchNorm1d, Dropout, common activations, Flatten/Reshape, Conv2d/MaxPool2d/GlobalAveragePool, Add/Multiply/ResidualAdd/Concat, Identity, MultiHeadAttention, CausalSelfAttention, PreNormTransformerBlock, MLP/FeedForward, SwiGLU, learned and sinusoidal position embeddings, LayerScale, and the four reference architectures through an Architecture node. A `partial` status means an execution path exists but broader acceptance coverage is still needed; metadata-only entries must not be treated as executable. Port typing, broader operator coverage (including advanced attention variants), a fully standalone export, stronger schema validation, and general-purpose task-specific training beyond the current tabular and MNIST paths remain follow-up work.
 
 Shape inference is advisory, not a proof of runtime compatibility. Always run a small inference test before training. Avoid executing generated code from untrusted sources without isolation.
 
@@ -112,7 +112,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/models/export \
 
 The response contains `filename`, `python_source`, and graph counts. Save the returned `python_source` value as `exported_model.py`. It embeds the graph specification and defines `build_model()` plus a reusable `GeneratedThinkNetModel(nn.Module)` wrapper.
 
-**Scope:** this is a reproducible source export, not yet a standalone vendored implementation. The generated file imports ThinkNet's compiler, so run it from the repository root with the backend dependencies installed. This deliberately keeps exported behavior aligned with the tested graph engine. Nodes that are catalogued but not executable are rejected during export rather than producing misleading code. The exported file does not include trained weights; save/load checkpoints and a full training pipeline remain separate work.
+**Scope:** this is a reproducible source export, not yet a standalone vendored implementation. The generated file imports ThinkNet's compiler, so run it from the repository root with the backend dependencies installed. This deliberately keeps exported behavior aligned with the tested graph engine. Nodes that are catalogued but not executable are rejected during export rather than producing misleading code. The exported file does not include trained weights; use the pipeline model.save/model.load components for durable local checkpoints.
 
 ### Executable node coverage update
 

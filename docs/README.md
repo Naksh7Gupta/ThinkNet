@@ -123,7 +123,7 @@ The export endpoint is also tested by parsing and executing the generated Python
 
 ## Universal pipeline capabilities
 
-ThinkNet's Pipeline Builder uses one typed DAG execution engine across task adapters. Current task examples include text classification (train-only TF-IDF + scikit-learn), tabular classification/regression, clustering, a PyTorch MNIST workflow, and causal language-model training using the existing managed trainer.
+ThinkNet's Pipeline Builder uses one typed DAG execution engine across task adapters. Current task examples include text classification (train-only TF-IDF + scikit-learn), tabular classification/regression through both scikit-learn and user-built PyTorch graphs, clustering, a PyTorch MNIST workflow, and causal language-model training using the existing managed trainer.
 
 Long-running visual pipelines can run as background jobs with status polling and cooperative cancellation. Completed runs persist graph snapshots, seeds, node results and metrics in a local experiment history. The builder includes starter templates for sentiment/spam, tabular classification, regression, clustering, causal LLM training and MNIST.
 

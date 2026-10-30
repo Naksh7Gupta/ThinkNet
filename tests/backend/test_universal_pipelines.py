@@ -117,3 +117,27 @@ def test_missing_required_input_is_rejected():
     result = pipelines.validate_pipeline(graph)
     assert result["valid"] is False
     assert "dataset" in result["errors"][0]
+
+
+def test_graph_rejects_incompatible_port_types():
+    graph = pipelines.PipelineGraph(
+        nodes=[
+            {"id": "load", "type": "csv.load"},
+            {"id": "inspect_a", "type": "dataset.inspect"},
+            {"id": "inspect_b", "type": "dataset.inspect"},
+        ],
+        edges=[
+            {"source": "load", "target": "inspect_a", "source_port": "dataset", "target_port": "dataset"},
+            {"source": "inspect_a", "target": "inspect_b", "source_port": "report", "target_port": "dataset"},
+        ],
+    )
+    result = pipelines.validate_pipeline(graph)
+    assert result["valid"] is False
+    assert "incompatible connection" in result["errors"][0].lower()
+
+
+def test_split_rejects_misaligned_xy(artifact_root):
+    x_ref = pipelines._write_csv([{"x": "1"}, {"x": "2"}], ["x"])
+    y_ref = pipelines._write_csv([{"y": "1"}], ["y"])
+    with pytest.raises(ValueError, match="row counts differ"):
+        pipelines._split_xy({}, {"X": x_ref, "Y": y_ref}, {"seed": 1})

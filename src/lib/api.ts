@@ -19,6 +19,10 @@ import type {
   CancelTrainingJobResponse,
   LocalModelInspection,
   LocalQuantizationJob,
+  PipelineGraph,
+  PipelineComponentCatalog,
+  PipelineValidation,
+  PipelineRun,
 } from "@/types/api";
 
 export const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
@@ -74,6 +78,18 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const api = {
   health: () => request<HealthResponse>("/health"),
+  listPipelineComponents: () =>
+    request<PipelineComponentCatalog>("/api/v1/pipelines/components"),
+  validatePipeline: (graph: PipelineGraph) =>
+    request<PipelineValidation>("/api/v1/pipelines/validate", {
+      method: "POST",
+      body: JSON.stringify(graph),
+    }),
+  runPipeline: (graph: PipelineGraph, seed = 42) =>
+    request<PipelineRun>("/api/v1/pipelines/run", {
+      method: "POST",
+      body: JSON.stringify({ graph, seed }),
+    }),
   listNodes: () => request<NodeCatalogResponse>("/api/v1/nodes"),
   listArchitectures: () => request<ArchitectureCatalogResponse>("/api/v1/architectures"),
   validateGraph: (graph: GraphDef) =>

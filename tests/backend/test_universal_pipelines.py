@@ -412,7 +412,7 @@ def test_causal_llm_pipeline_component_wraps_managed_training(tmp_path, monkeypa
                         lambda _job_id: {"status": "completed", "progress": 100, "message": "done"})
     result = pipelines._llm_train_causal(
         {"model_graph": {"nodes": [{"id": "placeholder"}]},
-         "training": {"dataset_path": "unused.txt", "max_steps": 12}},
+         "training": {"dataset_path": "unused.txt", "max_steps": 12, "log_every_steps": 3, "save_every_steps": 6}},
         {},
         {},
     )

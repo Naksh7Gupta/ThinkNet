@@ -733,6 +733,8 @@ def _mnist_train(config: dict[str, Any], inputs: dict[str, Any], context: dict[s
         model.train()
         total_loss, correct, seen = 0.0, 0, 0
         for batch_images, batch_labels in loader:
+            if context.get("cancel_event") is not None and context["cancel_event"].is_set():
+                raise RuntimeError("MNIST training cancelled.")
             batch_images = batch_images.to(device=device, dtype=torch.float32).div_(255.0)
             batch_labels = batch_labels.to(device=device)
             optimizer.zero_grad(set_to_none=True)

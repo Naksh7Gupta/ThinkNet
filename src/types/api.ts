@@ -327,3 +327,37 @@ export type PipelineProject = PipelineProjectSummary & {
 };
 
 export type PipelineProjectList = { projects: PipelineProjectSummary[] };
+
+
+export type PipelineJobStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
+export type PipelineJob = {
+  job_id: string;
+  status: PipelineJobStatus;
+  progress: number;
+  nodes: Array<{ node_id: string; type?: string; status: string; started_at?: string; finished_at?: string; error?: string }>;
+  current_node: string | null;
+  message: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  completed_at?: string;
+  run_id?: string;
+  result?: PipelineRun;
+  error?: string;
+};
+export type PipelineJobsResponse = {
+  jobs: PipelineJob[];
+  experiments: Array<{ run_id: string; name: string; status: string; created_at?: string; seed?: number; run_record: string }>;
+};
+export type ExperimentRecord = {
+  run_id: string;
+  name: string;
+  status: string;
+  seed?: number;
+  graph?: PipelineGraph;
+  nodes?: PipelineJob["nodes"];
+  outputs?: Record<string, Record<string, unknown>>;
+  error?: string;
+  created_at?: string;
+  run_record?: string;
+};

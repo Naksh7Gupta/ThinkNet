@@ -1017,6 +1017,7 @@ def _llm_generate(config: dict[str, Any], inputs: dict[str, Any], _context: dict
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     generated = generated.to(device)
+    generator = torch.Generator(device=device).manual_seed(int(_context.get("seed", 42)))
     with torch.no_grad():
         for _ in range(max_new_tokens):
             context_ids = generated[:, -sequence_length:]
@@ -1025,7 +1026,6 @@ def _llm_generate(config: dict[str, Any], inputs: dict[str, Any], _context: dict
                 logits = logits[0]
             next_logits = logits[:, -1, :] / temperature
             probabilities = torch.softmax(next_logits, dim=-1)
-            generator = torch.Generator(device=device).manual_seed(int(_context.get("seed", 42)))
             next_token = torch.multinomial(probabilities, num_samples=1, generator=generator)
             generated = torch.cat((generated, next_token), dim=1)
             if tokenizer.eos_token_id is not None and int(next_token.item()) == tokenizer.eos_token_id:

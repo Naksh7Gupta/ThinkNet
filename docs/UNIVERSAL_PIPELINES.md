@@ -174,3 +174,67 @@ Run:
 ```bash
 python -m pytest tests/backend/test_universal_pipelines.py -q
 ```
+
+
+## Reusable task engine (new foundation)
+
+The same DAG runner now exposes a reusable estimator adapter layer through
+`services/backend/thinknet_ml_engine.py`. The graph engine remains task-neutral;
+the adapters interpret task configuration and select an appropriate estimator.
+
+### Registered components
+
+- `text.tfidf`: converts a text column into numeric TF-IDF features. Configure
+  `text_column`, `label_column`, and `max_features`. It preserves the label
+  column when present.
+- `ml.fit`: fits a classification, regression, or clustering estimator.
+  Connect feature data to `X`; connect one-column targets to optional `Y`
+  for classification/regression. Supported estimator choices:
+  - classification: `logistic_regression`, `random_forest`
+  - regression: `linear_regression`, `random_forest`
+  - clustering: `kmeans` (configure `clusters`)
+- `ml.evaluate`: evaluates a fitted model. Classification reports accuracy
+  and weighted F1; regression reports MAE, RMSE and R²; clustering reports
+  cluster count and silhouette score when defined.
+- `ml.predict`: runs inference on a feature dataset with the same columns and
+  column order used during fitting.
+
+### Example: sentiment classification
+
+```text
+text.load
+   ↓
+text.tfidf
+   ↓
+dataset.select_xy
+   ↓
+dataset.split_xy
+   ├── X_train + Y_train → ml.fit
+   └── X_test + Y_test ─────────→ ml.evaluate ← fitted model
+                                  fitted model + X_test → ml.predict
+```
+
+Configure `dataset.select_xy` with TF-IDF feature columns and `label` as the
+target. Configure `ml.fit` with `{"task":"classification",
+"estimator":"logistic_regression"}`. For a valid held-out evaluation, connect
+the test split—not the training split—to `ml.evaluate`.
+
+### Boundaries of this first adapter layer
+
+- TF-IDF is a sparse-text baseline converted to a bounded dense feature table;
+  it is suitable for small/medium experiments, not huge corpora.
+- Estimator model handles are currently process-local. They expire when the
+  backend restarts; durable serialization and a unified model registry are
+  follow-up work. These adapters do not use the PyTorch `model.save` component.
+- Numeric tabular features are required by these estimator adapters. Categorical
+  encoding, missing-value strategies, cross-validation, and richer text
+  preprocessing are future reusable components.
+- The adapter layer demonstrates shared task infrastructure, not universal
+  support for every modality or algorithm. MNIST remains on the PyTorch path;
+  arbitrary vision/audio training and LLM fine-tuning are not implemented here.
+- Scikit-learn is an additional backend dependency.
+
+This is an incremental universal foundation: DAG execution, artifact contracts,
+and project workflow are shared, while task-specific adapters select their
+own estimators and metrics. It deliberately does not claim that all tasks use
+the same model or training algorithm.

@@ -1,0 +1,250 @@
+import { Agent, AutonomyLevel, LoopStage } from '../../types/thinknet';
+
+export const specializedAgents: Agent[] = [
+  {
+    id: 'agent-supervisor',
+    slug: 'training-supervisor-agent',
+    code: 'A',
+    name: 'Training Supervisor Agent',
+    primaryDomain: 'Coordination & Experiment Lifecycle',
+    summary:
+      'Coordinates specialized agents across training iterations, tracks experiments, detects anomalies, and synthesizes improvement recommendations.',
+    responsibilities: [
+      'Monitor training progress.',
+      'Coordinate specialized agents.',
+      'Track experiments.',
+      'Identify unusual behaviour.',
+      'Organize training iterations.',
+      'Recommend improvements.',
+    ],
+    relatedInfrastructureIds: ['div-research-infra', 'div-training-infra', 'div-eval-infra'],
+    connectedAgentIds: [
+      'agent-inspector',
+      'agent-data-research',
+      'agent-kernel-opt',
+      'agent-model-research',
+      'agent-eval',
+      'agent-post-training',
+    ],
+    autonomyScope: 'Coordinates multi-agent observation and prepares bounded experiment proposals for human approval.',
+  },
+  {
+    id: 'agent-inspector',
+    slug: 'training-inspector-agent',
+    code: 'B',
+    name: 'Training Inspector Agent',
+    primaryDomain: 'Diagnostics & Stability Telemetry',
+    summary:
+      'Monitors training and validation loss curves, gradient statistics, GPU utilization, and memory consumption to detect instability early.',
+    responsibilities: [
+      'Inspect training loss.',
+      'Monitor validation loss.',
+      'Analyze gradient statistics.',
+      'Monitor GPU utilization.',
+      'Inspect memory consumption.',
+      'Detect training instability.',
+      'Generate diagnostic reports.',
+    ],
+    relatedInfrastructureIds: ['div-training-infra', 'div-compute-kernel'],
+    connectedAgentIds: ['agent-supervisor', 'agent-kernel-opt', 'agent-model-research'],
+    autonomyScope: 'Continuous read-only telemetry inspection and automated diagnostic alerting.',
+  },
+  {
+    id: 'agent-data-research',
+    slug: 'data-research-agent',
+    code: 'C',
+    name: 'Data Research Agent',
+    primaryDomain: 'Dataset Quality, Synthetic Data & Curricula',
+    summary:
+      'Audits dataset quality, detects duplicates, diagnoses weak categories, optimizes data mixtures, and generates targeted synthetic examples.',
+    responsibilities: [
+      'Generate synthetic data.',
+      'Analyze dataset quality.',
+      'Detect duplicates.',
+      'Identify weak data categories.',
+      'Recommend data mixtures.',
+      'Generate targeted examples.',
+      'Organize training curricula.',
+    ],
+    relatedInfrastructureIds: ['div-data-eng', 'div-training-infra'],
+    connectedAgentIds: ['agent-supervisor', 'agent-eval', 'agent-post-training'],
+    autonomyScope: 'Generates candidate datasets and mixture proposals; training integration requires validation.',
+  },
+  {
+    id: 'agent-kernel-opt',
+    slug: 'kernel-optimization-agent',
+    code: 'D',
+    name: 'Kernel Optimization Agent',
+    primaryDomain: 'GPU Execution & Compute Efficiency',
+    summary:
+      'Profiles computational bottlenecks, inspects CUDA/Triton kernel performance, benchmarks memory usage, and proposes verified optimizations.',
+    responsibilities: [
+      'Analyze computational bottlenecks.',
+      'Inspect kernel performance.',
+      'Recommend optimization opportunities.',
+      'Compare kernel implementations.',
+      'Benchmark memory usage.',
+      'Report execution efficiency.',
+    ],
+    relatedInfrastructureIds: ['div-compute-kernel', 'div-inference-eng'],
+    connectedAgentIds: ['agent-supervisor', 'agent-inspector', 'agent-model-research'],
+    autonomyScope: 'Benchmarks kernel candidates in isolated sandboxes before proposing adoption.',
+  },
+  {
+    id: 'agent-model-research',
+    slug: 'model-research-agent',
+    code: 'E',
+    name: 'Model Research Agent',
+    primaryDomain: 'Architecture & Internal Representations',
+    summary:
+      'Studies layer behavior, attention patterns, and internal representations via LIIO to diagnose weaknesses and propose architecture experiments.',
+    responsibilities: [
+      'Inspect model architecture.',
+      'Analyze layer behaviour.',
+      'Study attention patterns.',
+      'Investigate model weaknesses.',
+      'Propose architecture experiments.',
+      'Analyze internal representations.',
+    ],
+    relatedInfrastructureIds: ['div-model-arch', 'div-research-infra'],
+    connectedAgentIds: ['agent-supervisor', 'agent-inspector', 'agent-eval', 'agent-kernel-opt'],
+    autonomyScope: 'Proposes architectural hypotheses grounded in LIIO interpretability measurements.',
+  },
+  {
+    id: 'agent-eval',
+    slug: 'evaluation-agent',
+    code: 'F',
+    name: 'Evaluation Agent',
+    primaryDomain: 'Capability Benchmarking & Regression Detection',
+    summary:
+      'Executes reasoning, math, coding, and tool-use benchmarks across checkpoints to detect regressions and surface improvement targets.',
+    responsibilities: [
+      'Run reasoning benchmarks.',
+      'Test coding capabilities.',
+      'Evaluate mathematics.',
+      'Analyze tool-use performance.',
+      'Detect capability regressions.',
+      'Compare checkpoints.',
+      'Identify improvement opportunities.',
+    ],
+    relatedInfrastructureIds: ['div-eval-infra', 'div-research-infra'],
+    connectedAgentIds: ['agent-supervisor', 'agent-data-research', 'agent-post-training', 'agent-model-research'],
+    autonomyScope: 'Runs standardized evaluation harnesses across checkpoints and reports regressions.',
+  },
+  {
+    id: 'agent-post-training',
+    slug: 'post-training-agent',
+    code: 'G',
+    name: 'Post-Training Agent',
+    primaryDomain: 'SFT, RLVR, Preference & Distillation',
+    summary:
+      'Prepares supervised fine-tuning, preference optimization, reward signal analysis, and teacher-student distillation experiments.',
+    responsibilities: [
+      'Prepare SFT experiments.',
+      'Investigate distillation.',
+      'Analyze reward signals.',
+      'Prepare preference datasets.',
+      'Evaluate post-training results.',
+      'Compare model capabilities.',
+    ],
+    relatedInfrastructureIds: ['div-post-training', 'div-data-eng', 'div-eval-infra'],
+    connectedAgentIds: ['agent-supervisor', 'agent-data-research', 'agent-eval'],
+    autonomyScope: 'Prepares post-training experiment configurations subject to validation and human approval.',
+  },
+];
+
+export const autonomyLevels: AutonomyLevel[] = [
+  {
+    level: 1,
+    name: 'Observer',
+    summary: 'Agents can inspect, measure, monitor and report.',
+    permissions: [
+      'Inspect training loss, gradients, memory, and hardware telemetry',
+      'Measure checkpoint evaluation metrics and dataset statistics',
+      'Monitor internal activations and generate diagnostic reports',
+    ],
+    safeguards: ['Strictly read-only access to configurations, weights, and production pipelines'],
+  },
+  {
+    level: 2,
+    name: 'Researcher',
+    summary: 'Agents can investigate problems, develop hypotheses and propose experiments.',
+    permissions: [
+      'Investigate capability regressions and computational bottlenecks',
+      'Develop grounded hypotheses backed by LIIO and benchmark evidence',
+      'Propose data mixtures, kernel optimizations, or architectural experiments',
+    ],
+    safeguards: ['Human review and explicit approval required prior to execution'],
+  },
+  {
+    level: 3,
+    name: 'Operator',
+    summary: 'Agents can execute approved experiments, modify configurations and manage bounded workflows.',
+    permissions: [
+      'Execute human-approved experiments within bounded compute budgets',
+      'Modify scoped experiment configurations under schema validation',
+      'Manage iterative evaluation and data-export workflows',
+    ],
+    safeguards: [
+      'Initially, consequential changes require human approval',
+      'Mandatory validation checks and strict compute/resource limits',
+      'Immutable experiment logs and automated rollback mechanisms',
+    ],
+  },
+];
+
+export const continuousTrainingLoop: LoopStage[] = [
+  {
+    id: 'stage-before',
+    stage: 'Before training',
+    timing: 'Pre-Flight',
+    actions: [
+      'Inspect configurations.',
+      'Analyze datasets.',
+      'Check architecture.',
+      'Estimate computational requirements.',
+    ],
+  },
+  {
+    id: 'stage-during',
+    stage: 'During training',
+    timing: 'Active Execution',
+    actions: [
+      'Monitor metrics.',
+      'Inspect computational performance.',
+      'Analyze training stability.',
+      'Track resource consumption.',
+    ],
+  },
+  {
+    id: 'stage-checkpoints',
+    stage: 'At checkpoints',
+    timing: 'Periodic Verification',
+    actions: [
+      'Evaluate capabilities.',
+      'Inspect internal model behaviour.',
+      'Compare results.',
+    ],
+  },
+  {
+    id: 'stage-between',
+    stage: 'Between experiments',
+    timing: 'Analysis & Synthesis',
+    actions: [
+      'Identify weaknesses.',
+      'Generate hypotheses.',
+      'Recommend improvements.',
+      'Prepare new experiments.',
+    ],
+  },
+  {
+    id: 'stage-next',
+    stage: 'Next iteration',
+    timing: 'Approved Evolution',
+    actions: [
+      'Execute approved improvements.',
+      'Compare outcomes.',
+      'Record findings.',
+    ],
+  },
+];

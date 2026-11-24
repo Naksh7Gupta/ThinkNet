@@ -1,0 +1,1601 @@
+# THINKNET
+## AI Research, Engineering & Intelligence Ecosystem
+### Master Project Context, Vision, Architecture & Development Blueprint
+
+**Organization:** ThinkNet  
+**Project:** ThinkNet AI Research & Engineering Ecosystem  
+**Document Type:** Master Project Context  
+**Purpose:** Establish the complete vision, technical direction, research priorities, environment ecosystem, engineering tools and long-term development strategy of ThinkNet.
+
+---
+
+# PART 1 — WHAT IS THINKNET?
+
+## 1.1 Vision
+
+ThinkNet is an AI research and engineering organization focused on understanding, developing, improving and advancing artificial intelligence, particularly Large Language Models (LLMs).
+
+Our ambition is not simply to build another chatbot or model-training interface.
+
+We want to develop an extensive AI research ecosystem containing:
+
+- AI research infrastructure.
+- Model training infrastructure.
+- Agentic training systems.
+- Interactive learning environments.
+- Synthetic data generation systems.
+- Knowledge distillation infrastructure.
+- Kernel and computational optimization tools.
+- Model architecture experimentation tools.
+- Multimodal intelligence environments.
+- Evaluation and benchmarking systems.
+- Model interpretability and inspection systems.
+- Autonomous AI research agents.
+- Generative AI infrastructure.
+- Low-level model engineering tools.
+
+The central idea is to create an environment in which AI models can learn, experiment, interact, develop capabilities, receive feedback and continuously improve.
+
+ThinkNet will investigate how we can develop more capable, efficient, reliable and intelligent models through better training methodologies, architectures, data, environments and computational engineering.
+
+## 1.2 Core Philosophy
+
+Our philosophy:
+
+**Don't just train models on information. Give them environments in which they can develop capabilities.**
+
+Traditional training frequently relies on static datasets.
+
+ThinkNet wants to investigate a broader approach involving:
+
+1. High-quality pretraining data.
+2. Synthetic data generation.
+3. Interactive environments.
+4. Structured episodes.
+5. Realistic task execution.
+6. AI-agent-assisted training.
+7. Automated evaluation.
+8. Feedback-driven learning.
+9. Distillation and post-training.
+10. Computational optimization.
+
+We want models to develop capabilities through both information and experience.
+
+---
+
+# PART 2 — THINKNET'S CORE ARCHITECTURE
+
+ThinkNet will be organized into several interconnected technical divisions.
+
+## 2.1 Research Infrastructure
+
+Tools for conducting AI research:
+
+- Research experiment manager.
+- Hypothesis tracker.
+- Research paper analyzer.
+- Architecture experimentation tools.
+- Model comparison systems.
+- Experiment reproducibility.
+- Results visualization.
+- Automated research reports.
+- Benchmark management.
+
+## 2.2 Compute & Kernel Engineering
+
+Tools for improving computational efficiency:
+
+- GPU profiling.
+- Custom kernel development.
+- Triton kernel development.
+- CUDA experimentation.
+- Memory optimization.
+- Kernel benchmarking.
+- Distributed computing.
+- Communication optimization.
+- Operator fusion.
+- FlashAttention experimentation.
+- Low-level execution analysis.
+
+## 2.3 Training Infrastructure
+
+Tools for developing and training models:
+
+- Pretraining engine.
+- Supervised Fine-Tuning (SFT).
+- Distributed training.
+- Mixed-precision training.
+- Gradient accumulation.
+- Checkpoint management.
+- Training-loss analysis.
+- Training profiling.
+- Experiment tracking.
+- Training configuration management.
+
+## 2.4 Data Engineering
+
+Tools for creating and managing training datasets:
+
+- Synthetic data generation.
+- Dataset cleaning.
+- Data filtering.
+- Deduplication.
+- Data quality scoring.
+- Data mixture optimization.
+- Curriculum generation.
+- Contamination detection.
+- Dataset versioning.
+- Training-data analysis.
+
+## 2.5 Post-Training & Distillation
+
+Research and engineering tools for improving pretrained models:
+
+- SFT.
+- DPO.
+- GRPO.
+- RLVR.
+- Reward modeling.
+- Teacher-student distillation.
+- Logit distillation.
+- Feature distillation.
+- Reasoning distillation.
+- Multi-teacher distillation.
+- Progressive distillation.
+- Capability evaluation.
+
+## 2.6 Model Architecture Research
+
+Tools for experimenting with model architecture:
+
+- Transformer architecture designer.
+- Attention mechanism experimentation.
+- Multi-Head Attention.
+- Multi-Query Attention.
+- Grouped-Query Attention.
+- Multi-head Latent Attention.
+- Mixture of Experts.
+- Dynamic depth.
+- KV-cache optimization.
+- Positional encoding.
+- Parameter efficiency.
+- Architecture benchmarking.
+
+## 2.7 Evaluation Infrastructure
+
+Tools for measuring model capabilities:
+
+- Reasoning benchmarks.
+- Mathematics benchmarks.
+- Coding benchmarks.
+- Scientific reasoning.
+- Long-context evaluation.
+- Tool-use evaluation.
+- Multimodal evaluation.
+- Hallucination measurement.
+- Reliability testing.
+- Model comparison.
+- Regression testing.
+
+## 2.8 Inference Engineering
+
+Tools for efficient model execution:
+
+- Speculative decoding.
+- Continuous batching.
+- PagedAttention.
+- KV-cache management.
+- Quantization.
+- Model serving.
+- Memory-efficient inference.
+- Throughput optimization.
+- Latency optimization.
+- Inference benchmarking.
+
+---
+
+# PART 3 — AGENTIC RESEARCH & TRAINING SYSTEM
+
+## 3.1 Core Concept
+
+AI agents will actively participate throughout the model development and training lifecycle.
+
+They will not simply execute isolated tasks.
+
+They will observe, inspect, analyze, investigate, generate experiments, evaluate results and recommend improvements.
+
+The long-term objective is to develop an AI-assisted research and training infrastructure in which specialized agents work together.
+
+## 3.2 Specialized Agents
+
+### A. Training Supervisor Agent
+
+Responsibilities:
+
+- Monitor training progress.
+- Coordinate specialized agents.
+- Track experiments.
+- Identify unusual behaviour.
+- Organize training iterations.
+- Recommend improvements.
+
+### B. Training Inspector Agent
+
+Responsibilities:
+
+- Inspect training loss.
+- Monitor validation loss.
+- Analyze gradient statistics.
+- Monitor GPU utilization.
+- Inspect memory consumption.
+- Detect training instability.
+- Generate diagnostic reports.
+
+### C. Data Research Agent
+
+Responsibilities:
+
+- Generate synthetic data.
+- Analyze dataset quality.
+- Detect duplicates.
+- Identify weak data categories.
+- Recommend data mixtures.
+- Generate targeted examples.
+- Organize training curricula.
+
+### D. Kernel Optimization Agent
+
+Responsibilities:
+
+- Analyze computational bottlenecks.
+- Inspect kernel performance.
+- Recommend optimization opportunities.
+- Compare kernel implementations.
+- Benchmark memory usage.
+- Report execution efficiency.
+
+### E. Model Research Agent
+
+Responsibilities:
+
+- Inspect model architecture.
+- Analyze layer behaviour.
+- Study attention patterns.
+- Investigate model weaknesses.
+- Propose architecture experiments.
+- Analyze internal representations.
+
+### F. Evaluation Agent
+
+Responsibilities:
+
+- Run reasoning benchmarks.
+- Test coding capabilities.
+- Evaluate mathematics.
+- Analyze tool-use performance.
+- Detect capability regressions.
+- Compare checkpoints.
+- Identify improvement opportunities.
+
+### G. Post-Training Agent
+
+Responsibilities:
+
+- Prepare SFT experiments.
+- Investigate distillation.
+- Analyze reward signals.
+- Prepare preference datasets.
+- Evaluate post-training results.
+- Compare model capabilities.
+
+## 3.3 Three Levels of Agent Autonomy
+
+**Level 1 — Observer**
+
+Agents can inspect, measure, monitor and report.
+
+**Level 2 — Researcher**
+
+Agents can investigate problems, develop hypotheses and propose experiments.
+
+**Level 3 — Operator**
+
+Agents can execute approved experiments, modify configurations and manage bounded workflows.
+
+Initially, consequential changes require human approval.
+
+Autonomous operations must have validation, resource limits, experiment logs and rollback mechanisms.
+
+## 3.4 Continuous Training Intelligence Loop
+
+The system should operate throughout training.
+
+Before training:
+- Inspect configurations.
+- Analyze datasets.
+- Check architecture.
+- Estimate computational requirements.
+
+During training:
+- Monitor metrics.
+- Inspect computational performance.
+- Analyze training stability.
+- Track resource consumption.
+
+At checkpoints:
+- Evaluate capabilities.
+- Inspect internal model behaviour.
+- Compare results.
+
+Between experiments:
+- Identify weaknesses.
+- Generate hypotheses.
+- Recommend improvements.
+- Prepare new experiments.
+
+Next iteration:
+- Execute approved improvements.
+- Compare outcomes.
+- Record findings.
+
+The objective is a continuous, measurable research cycle.
+
+---
+
+# PART 4 — THE THINKNET ENVIRONMENT ECOSYSTEM
+
+This is one of ThinkNet's most important research directions.
+
+We want to create a large ecosystem of interactive environments in which LLMs can develop specialized capabilities.
+
+These environments should not be limited to text-based exercises.
+
+They should include real software, simulations, professional tools, scientific workflows, engineering systems, visual environments and complex tasks.
+
+## 4.1 Standard Environment Hierarchy
+
+Every environment follows this hierarchy:
+
+ENVIRONMENT → EPISODES → TASKS → EVALUATION → FEEDBACK
+
+**Environment:** A complete learning domain.
+
+**Episode:** A focused learning experience designed to develop a particular capability.
+
+**Task:** An individual assignment within an episode.
+
+**Evaluation:** Measures the quality of execution.
+
+**Feedback:** Identifies mistakes and provides information for improvement.
+
+An episode can contain hundreds or thousands of different tasks.
+
+---
+
+# PART 5 — ENVIRONMENT FAMILY 01
+# INTELLIGENCE & RESEARCH
+
+Objective: Develop advanced intellectual capabilities.
+
+## A. Deep Research Environment
+
+Episode: Beat Perplexity AI in the Research Game.
+
+Learning objectives:
+
+- Research complex subjects.
+- Navigate multiple sources.
+- Read research papers.
+- Cross-verify information.
+- Detect contradictory claims.
+- Analyze scientific literature.
+- Synthesize large quantities of information.
+- Generate comprehensive reports.
+- Attach evidence to claims.
+- Evaluate source reliability.
+
+Final challenge:
+
+Give the model a complicated research question and evaluate its research report against strong frontier research assistants.
+
+## B. Mathematics Environment
+
+Episodes:
+
+- Master Arithmetic.
+- Become an Algebra Expert.
+- Advanced Geometry.
+- Mathematical Proofs.
+- Calculus and Analysis.
+- Probability and Statistics.
+- Linear Algebra.
+- Discrete Mathematics.
+- Competitive Mathematics.
+- Mathematical Research.
+
+## C. Science Environment
+
+Episodes:
+
+- Physics Problem Solver.
+- Chemistry Researcher.
+- Biology Intelligence.
+- Molecular Science.
+- Scientific Literature Analysis.
+- Experimental Design.
+- Scientific Hypothesis Generation.
+- Computational Science.
+
+## D. Natural Language Environment
+
+Episode: Talk Like a Human.
+
+Learning objectives:
+
+- Natural conversations.
+- Understanding intent.
+- Handling ambiguity.
+- Context retention.
+- Clear explanations.
+- Communication flexibility.
+- Professional conversations.
+- Complex instruction understanding.
+
+## E. Writing Environment
+
+Episode: Master the Art of Writing.
+
+Learning objectives:
+
+- Professional writing.
+- Technical documentation.
+- Research papers.
+- Long-form articles.
+- Reports.
+- Scripts.
+- Creative writing.
+- Editing and revision.
+- Writing consistency.
+- Human-readable explanations.
+
+## F. Long-Context Intelligence
+
+Episodes:
+
+- Understand an Entire Codebase.
+- Read Extremely Long Documents.
+- Process 100K+ Token Instructions.
+- Cross-Document Reasoning.
+- Long-Context Retrieval.
+- Information Consistency.
+- Long-Context Memory Evaluation.
+
+An important research objective is to understand whether models can reliably process, retrieve and reason over very large contexts rather than merely accepting large context windows.
+
+---
+
+# PART 6 — ENVIRONMENT FAMILY 02
+# REAL-WORLD ENGINEERING & NOT JUST TEXT
+
+This family develops capabilities beyond ordinary language interaction.
+
+It includes multimodal, spatial, scientific, engineering and real-world software capabilities.
+
+## SERIES A — REAL-WORLD ENGINEERING
+
+### 1. Enterprise Software Engineering
+
+Episode: Build Better Than the Original.
+
+Learning objectives:
+
+- Understand complex enterprise applications.
+- Read large codebases.
+- Analyze software architecture.
+- Inspect dependencies.
+- Identify performance bottlenecks.
+- Discover software vulnerabilities in authorized environments.
+- Identify security weaknesses.
+- Recommend remediation.
+- Improve maintainability.
+- Improve reliability.
+- Improve performance.
+- Develop independent implementations.
+
+Important research direction:
+
+Study how AI agents can conduct systematic enterprise software audits.
+
+For example, a hypothetical audit involving 121 identified improvement opportunities could investigate:
+
+- Performance.
+- Security.
+- Code quality.
+- Architecture.
+- Reliability.
+- Maintainability.
+- Resource efficiency.
+- User experience.
+
+The objective is not to claim that software can become absolutely non-hackable. The objective is to make systems measurably more secure and reliable through testing, verification and remediation.
+
+### 2. Complex Software Engineering
+
+Episodes:
+
+- Build Large Applications.
+- Understand Enterprise Codebases.
+- Debug Complex Systems.
+- Design Software Architecture.
+- Build Production-Style APIs.
+- Database Engineering.
+- Distributed Systems.
+- Software Testing.
+- Documentation Engineering.
+
+### 3. Enterprise Systems
+
+Episode: Build Systems That Run the Real World.
+
+Learning objectives:
+
+- Banking system simulations.
+- Airport management systems.
+- Database infrastructure.
+- Hospital management software.
+- Inventory management.
+- Transaction processing.
+- Enterprise resource planning.
+- Distributed applications.
+
+Use isolated simulations and synthetic data for sensitive or safety-critical workflows.
+
+### 4. Complex Software Ecosystems
+
+Learning objectives:
+
+- Work with professional applications.
+- Understand interconnected services.
+- Navigate APIs.
+- Manage dependencies.
+- Integrate multiple software platforms.
+- Understand complex workflows.
+
+## SERIES B — NOT JUST TEXT
+
+Central objective:
+
+Teach models to understand, create, manipulate and engineer representations of the world beyond language.
+
+### Episode 01 — Predict the Invisible
+
+Learning objectives:
+
+- Protein structures.
+- Protein sequences.
+- Molecular structures.
+- Structural visualization.
+- Scientific data interpretation.
+- Computational biology.
+- Scientific evaluation.
+
+Special research challenge:
+
+Predict and analyze therapeutic capsid structures using validated scientific datasets and computational methods.
+
+### Episode 02 — Design a Computer from Scratch
+
+Learning objectives:
+
+- Computer architecture.
+- Digital logic.
+- Electronic components.
+- PCB design.
+- Circuit simulation.
+- Semiconductor fundamentals.
+- Hardware documentation.
+- Board-level engineering.
+
+### Episode 03 — Become a 3D Creator
+
+Learning objectives:
+
+- Blender.
+- 3D geometry.
+- Procedural modelling.
+- Materials.
+- Textures.
+- Lighting.
+- Animation.
+- Rendering.
+
+### Episode 04 — Reality Is Editable
+
+Learning objectives:
+
+- Image-to-3D reconstruction.
+- Video-to-3D reconstruction.
+- Scene understanding.
+- Spatial relationships.
+- Environment reconstruction.
+- Interactive 3D modification.
+
+### Episode 05 — The Living Facecam
+
+Learning objectives:
+
+- Real-time facecam editing.
+- Video understanding.
+- Foreground and background separation.
+- Scene reconstruction.
+- Blender integration.
+- Virtual studio creation.
+- Lighting modification.
+- Interactive visual workspaces.
+
+Inspiration: Advanced interactive computer-use and multimodal experiences such as the GPT-6.2 Astra demonstration discussed during planning.
+
+### Episode 06 — See Beyond Pixels
+
+Learning objectives:
+
+- Image understanding.
+- Object recognition.
+- Depth estimation.
+- Spatial reasoning.
+- Visual relationships.
+- Scene interpretation.
+
+### Episode 07 — Build a Digital Twin
+
+Learning objectives:
+
+- Digital representations of physical objects.
+- Building simulations.
+- Machine simulations.
+- Environment modelling.
+- Real-world data integration.
+
+### Episode 08 — The Robotics Playground
+
+Learning objectives:
+
+- Robotics concepts.
+- Robot simulation.
+- Motion planning.
+- Spatial reasoning.
+- Robot control.
+- Sensor interpretation.
+
+### Episode 09 — Understand the Physical World
+
+Learning objectives:
+
+- Physics simulations.
+- Mechanical systems.
+- Forces and motion.
+- Physical constraints.
+- Engineering principles.
+
+### Episode 10 — Become a Scientific Researcher
+
+Learning objectives:
+
+- Experimental results.
+- Scientific visualizations.
+- Hypothesis generation.
+- Data analysis.
+- Scientific interpretation.
+
+### Episode 11 — The Semiconductor Engineer
+
+Learning objectives:
+
+- Chip architecture.
+- Semiconductor fundamentals.
+- Circuit simulation.
+- Digital logic.
+- Hardware design.
+- Design verification.
+
+### Episode 12 — Master Complex CAD
+
+Learning objectives:
+
+- Mechanical assemblies.
+- Architectural design.
+- Engineering drawings.
+- CAD modelling.
+- Design constraints.
+
+### Episode 13 — The Audio Intelligence Lab
+
+Learning objectives:
+
+- Speech recognition.
+- Audio understanding.
+- Sound classification.
+- Speech generation.
+- Music structure.
+- Audio processing.
+
+### Episode 14 — Understand Time and Motion
+
+Learning objectives:
+
+- Video understanding.
+- Temporal reasoning.
+- Motion tracking.
+- Scene transitions.
+- Video reconstruction.
+
+### Episode 15 — Build the Physical World Digitally
+
+Learning objectives:
+
+- CAD.
+- 3D.
+- Robotics.
+- Simulation.
+- Engineering systems.
+- Multimodal interaction.
+
+### Ten Additional Episodes
+
+16. The Architect — architectural design and building spaces.
+
+17. The Material Scientist — materials and computational materials research.
+
+18. The Weather Simulator — weather models and forecasting simulations.
+
+19. The Geospatial Intelligence Lab — satellite imagery, GIS and terrain analysis.
+
+20. The Digital Manufacturing Lab — manufacturing and production simulations.
+
+21. The Medical Imaging Researcher — supervised medical imaging research.
+
+22. The Animation Director — animation, motion and visual storytelling.
+
+23. The Data Visualization Engineer — complex interactive visualizations.
+
+24. The Autonomous Systems Lab — simulated autonomous systems.
+
+25. The Multimodal Scientist — combining text, images, audio, video and structured data.
+
+### Cross-Environment Challenge
+
+Episode: Build an AI-Powered Robotics Company.
+
+The LLM must:
+
+1. Research robotics technologies.
+2. Understand robotics codebases.
+3. Design a robot in Blender.
+4. Develop its software.
+5. Simulate it.
+6. Debug the system.
+7. Write technical documentation.
+8. Present the completed work.
+
+Research objective: Cross-Environment Capability Transfer.
+
+Investigate whether knowledge learned in one environment transfers to other environments.
+
+For example, does learning 3D geometry improve spatial reasoning in robotics?
+
+---
+
+# PART 7 — ENVIRONMENT FAMILY 03
+# LOW-LEVEL MODEL ENGINEERING
+
+Episode Series: Inside the Machine.
+
+Objective:
+
+Teach LLMs how to understand, inspect, optimize and improve the computational machinery behind AI models.
+
+## Episode 01 — Kernel Optimization
+
+Learning objectives:
+
+- GPU execution.
+- CUDA.
+- Triton.
+- GPU memory hierarchy.
+- Parallel computation.
+- Memory access patterns.
+- Custom GPU kernels.
+- Kernel profiling.
+- Benchmarking.
+
+Final challenge:
+
+Develop an optimized implementation of a model operation and demonstrate measurable performance improvements while preserving numerical correctness.
+
+## Episode 02 — Model Scripting & Engineering
+
+Learning objectives:
+
+- Custom Python scripts.
+- C++ model operations.
+- Triton scripts.
+- Training utilities.
+- Inference utilities.
+- Model debugging.
+- Custom execution pipelines.
+
+## Episode 03 — Memory Architecture Mastery
+
+Learning objectives:
+
+- RAM and VRAM.
+- Memory allocation.
+- Activation memory.
+- KV-cache.
+- Memory-efficient execution.
+- Memory profiling.
+- Memory fragmentation.
+
+## Episode 04 — Compiler & Graph Optimization
+
+Learning objectives:
+
+- Computational graphs.
+- Operator fusion.
+- Graph compilation.
+- Execution scheduling.
+- Compiler optimizations.
+- Graph transformations.
+
+## Episode 05 — Distributed Model Engineering
+
+Learning objectives:
+
+- Data parallelism.
+- Tensor parallelism.
+- Pipeline parallelism.
+- Communication overhead.
+- Distributed execution.
+- Synchronization.
+
+## Episode 06 — Numerical Precision Engineering
+
+Learning objectives:
+
+- FP32.
+- BF16.
+- FP16.
+- FP8.
+- Quantization.
+- Mixed precision.
+- Numerical stability.
+- Precision-performance trade-offs.
+
+---
+
+# PART 8 — ENVIRONMENT FAMILY 04
+# AGENTIC & GENERATIVE AI
+
+Episode Series: From Generation to Autonomy.
+
+Objective:
+
+Teach LLMs to build, operate, coordinate and develop intelligent AI systems.
+
+## SERIES A — AGENTIC AI
+
+### Episode 01 — The Automation Engineer
+
+- Workflow automation.
+- Triggers.
+- Conditions.
+- Scheduling.
+- Event-driven systems.
+- Automated workflows.
+
+### Episode 02 — Master AI Agents
+
+- Agent architecture.
+- Planning.
+- Memory.
+- Tool usage.
+- Execution loops.
+- Decision-making.
+
+### Episode 03 — Multi-Agent Intelligence
+
+- Agent collaboration.
+- Delegation.
+- Communication.
+- Coordination.
+- Shared objectives.
+- Multi-agent problem-solving.
+
+### Episode 04 — The Agent Orchestrator
+
+- Agent management.
+- Task allocation.
+- Workflow orchestration.
+- Dependency management.
+- Agent supervision.
+
+### Episode 05 — Agent Memory Systems
+
+- Short-term memory.
+- Long-term memory.
+- Retrieval.
+- Knowledge management.
+- Memory evaluation.
+
+### Episode 06 — The Tool-Using LLM
+
+- Function calling.
+- APIs.
+- MCP.
+- Tool integration.
+- Tool selection.
+- Execution verification.
+
+### Episode 07 — Autonomous Software Engineer
+
+- Planning software projects.
+- Writing code.
+- Testing.
+- Debugging.
+- Code review.
+- Maintenance.
+
+### Episode 08 — Computer-Use Mastery
+
+- GUI interaction.
+- Browser automation.
+- Desktop interaction.
+- Multi-step workflows.
+- Error recovery.
+
+### Episode 09 — Agent Evaluation Lab
+
+- Task completion.
+- Reliability.
+- Tool-use accuracy.
+- Execution efficiency.
+- Failure analysis.
+
+### Episode 10 — Self-Improving Agents
+
+- Reflection.
+- Feedback.
+- Experience collection.
+- Iterative improvement.
+- Evaluation-driven adaptation.
+
+## SERIES B — GENERATIVE AI
+
+### Episode 11 — Image Generation Studio
+
+- Diffusion models.
+- Image generation.
+- Image editing.
+- Conditioning.
+- Visual consistency.
+
+### Episode 12 — Video Generation Studio
+
+- Text-to-video.
+- Image-to-video.
+- Temporal consistency.
+- Video editing.
+- Motion generation.
+
+### Episode 13 — Audio Intelligence & Generation
+
+- Text-to-speech.
+- Speech recognition.
+- Voice generation.
+- Audio processing.
+
+### Episode 14 — Music Generation Lab
+
+- Music composition.
+- Sound generation.
+- Musical structures.
+- Audio modelling.
+
+### Episode 15 — 3D Generation Lab
+
+- Text-to-3D.
+- Image-to-3D.
+- Procedural generation.
+- 3D asset generation.
+
+### Episode 16 — Multimodal Generation
+
+- Text.
+- Images.
+- Audio.
+- Video.
+- Structured outputs.
+
+### Episode 17 — Real-Time Generation
+
+- Interactive generation.
+- Streaming outputs.
+- Low-latency generation.
+- Real-time systems.
+
+### Episode 18 — Generative Design
+
+- Interface generation.
+- Website generation.
+- Software layouts.
+- Design systems.
+- Visual generation.
+
+## SERIES C — ADVANCED AGENTIC RESEARCH
+
+### Episode 19 — Agent-to-Agent Communication
+
+Communication protocols and information exchange between agents.
+
+### Episode 20 — Agentic Researcher
+
+Agents conducting literature reviews, experiments and evidence-based research.
+
+### Episode 21 — Agentic Data Scientist
+
+Agents analyzing datasets, generating hypotheses and producing reports.
+
+### Episode 22 — Generative Simulation
+
+Creating interactive worlds and simulations through generative models.
+
+### Episode 23 — Agentic Cybersecurity
+
+Authorized defensive security analysis, vulnerability discovery and remediation.
+
+### Episode 24 — Agentic Infrastructure Engineer
+
+Cloud infrastructure, deployment, monitoring and infrastructure automation.
+
+### Episode 25 — Human-Agent Collaboration
+
+Building systems in which humans and AI agents work together.
+
+### Special Episode — Build Your Own AI Company
+
+A simulated company operated by specialized agents.
+
+Possible structure:
+
+- CEO Agent.
+- Management Agent.
+- Research Agent.
+- Engineering Agent.
+- Operations Agent.
+- Evaluation Agent.
+
+The agents must collaborate, delegate, review results and deliver functioning products.
+
+---
+
+# PART 9 — THE UNIVERSAL EPISODE ENGINE
+
+This is a particularly important architectural decision.
+
+We should not create thousands of isolated training systems.
+
+Instead, develop one reusable ThinkNet Environment Engine.
+
+Every environment and episode should use shared infrastructure.
+
+## 9.1 Standard Episode Structure
+
+Every episode should contain:
+
+1. Episode Identity.
+2. Learning Objectives.
+3. Environment Definition.
+4. Available Tools.
+5. Reference Materials.
+6. Task Library.
+7. Task Generator.
+8. Difficulty Progression.
+9. Execution Engine.
+10. Observation System.
+11. Evaluation Engine.
+12. Feedback Engine.
+13. Curriculum Manager.
+14. Training Data Exporter.
+15. Benchmark Integration.
+
+## 9.2 Difficulty Levels
+
+Every episode should support progressive difficulty.
+
+**Level 1 — Foundation**
+
+Basic understanding and simple tasks.
+
+**Level 2 — Intermediate**
+
+Multi-step assignments and tool interaction.
+
+**Level 3 — Advanced**
+
+Complex tasks requiring planning and deeper understanding.
+
+**Level 4 — Professional**
+
+Realistic workflows and substantial projects.
+
+**Level 5 — Research**
+
+Open-ended problems, experimentation and novel solutions.
+
+These levels are flexible. Some environments may require specialized progressions.
+
+## 9.3 Adaptive Episodes
+
+The system should adapt to the model's current abilities.
+
+Example:
+
+1. Model receives a task.
+2. It attempts execution.
+3. Evaluator measures performance.
+4. Weaknesses are identified.
+5. Task generator creates targeted follow-up tasks.
+6. Model attempts again.
+7. Progress is measured.
+
+The goal is to develop adaptive curricula rather than relying exclusively on static task collections.
+
+## 9.4 Environment Interconnection
+
+Episodes should eventually combine multiple environments.
+
+Example:
+
+An LLM building an AI-powered robotics system may need:
+
+- Deep Research.
+- Software Engineering.
+- 3D Modelling.
+- Robotics.
+- Mathematics.
+- Computer Use.
+- Documentation.
+- Evaluation.
+
+The Environment Engine should allow multiple environments to participate in one complex assignment.
+
+---
+
+# PART 10 — TRAINING AND LEARNING INTEGRATION
+
+The environments must connect to actual model training.
+
+Simply completing tasks does not automatically improve model weights.
+
+We must design appropriate learning mechanisms.
+
+Possible approaches:
+
+### 1. Supervised Learning
+
+Use demonstrations and validated task trajectories to create supervised examples.
+
+### 2. Reinforcement Learning
+
+Use suitable environments with measurable rewards to investigate reinforcement learning.
+
+### 3. Verifiable Rewards
+
+Use objectively checkable outcomes wherever possible.
+
+Examples:
+
+- Code passes tests.
+- Mathematical answers satisfy verification.
+- CAD designs satisfy geometric constraints.
+- Software workflows reach the expected state.
+
+### 4. Preference Optimization
+
+Collect comparisons between different outputs and improve response preferences.
+
+### 5. Knowledge Distillation
+
+Transfer useful capabilities from stronger teacher models into smaller student models.
+
+### 6. Synthetic Data
+
+Generate additional training examples using specialized agents and validated workflows.
+
+### 7. Curriculum Learning
+
+Gradually increase task complexity based on measured performance.
+
+### 8. Experience-Based Learning
+
+Investigate how useful interaction histories and execution trajectories can improve subsequent training.
+
+Important distinction:
+
+A model's successful task execution is an experience. It becomes training data only after appropriate selection, validation, formatting and integration into a training process.
+
+---
+
+# PART 11 — LIIO: LLM INTERNAL INTELLIGENCE OBSERVATORY
+
+LIIO is a research platform associated with ThinkNet.
+
+Its objective is to inspect, measure, visualize and experimentally investigate the internal computational behaviour of pretrained LLMs.
+
+Proposed capabilities:
+
+1. Layer Contribution Analyzer.
+2. Attention Head Inspector.
+3. Neuron and MLP Analyzer.
+4. Activation Visualization.
+5. Representation Analysis.
+6. Token-Level Analysis.
+7. Attention Pattern Inspection.
+8. Hidden-State Comparison.
+9. Model Behaviour Tracking.
+10. Architecture Experimentation.
+
+LIIO should integrate with the training infrastructure and evaluation system.
+
+Research objective:
+
+Understand why models produce particular outputs, how internal components contribute to computations and whether architecture modifications produce measurable improvements.
+
+---
+
+# PART 12 — BENCHMARKING AGAINST FRONTIER INTELLIGENCE
+
+ThinkNet must maintain rigorous evaluation standards.
+
+We should compare our models against strong existing models.
+
+Comparison dimensions:
+
+- Reasoning.
+- Mathematics.
+- Coding.
+- Deep Research.
+- Long Context.
+- Computer Use.
+- Software Engineering.
+- Multimodal Understanding.
+- Tool Use.
+- Writing.
+- Reliability.
+- Efficiency.
+
+For every benchmark, record:
+
+- Model version.
+- Benchmark version.
+- Task difficulty.
+- Number of attempts.
+- Success rate.
+- Accuracy.
+- Execution time.
+- Token consumption.
+- Tool usage.
+- Cost.
+- Evaluation methodology.
+
+Use equivalent tools, budgets and conditions wherever possible.
+
+Do not confuse benchmark-specific success with general intelligence.
+
+---
+
+# PART 13 — IMPORTANT RESEARCH QUESTIONS
+
+ThinkNet should maintain a research register containing open questions and hypotheses.
+
+Some initial research directions:
+
+1. Can carefully selected training data improve parameter efficiency?
+2. Can interactive environments improve coding and reasoning capabilities?
+3. Can capabilities transfer between different environments?
+4. Can smaller models outperform larger models on carefully selected tasks?
+5. Can dynamic-depth architectures improve computational efficiency?
+6. Can improved KV-cache policies reduce memory consumption?
+7. Can specialized agents improve the quality of training experiments?
+8. Can synthetic data improve reasoning without introducing unwanted errors?
+9. Can distillation preserve complex capabilities in smaller models?
+10. Can models learn to inspect and optimize their own computational workflows?
+11. Can long-context training improve practical codebase understanding?
+12. Can multimodal environments improve spatial intelligence?
+13. Can environment-generated trajectories improve tool-use reliability?
+14. Can automated kernel optimization produce measurable inference improvements?
+15. Can cross-environment training produce transferable capabilities?
+
+Every hypothesis must be tested experimentally.
+
+---
+
+# PART 14 — DEVELOPMENT PHILOSOPHY
+
+ThinkNet should be developed systematically.
+
+We should not attempt to build the entire ecosystem simultaneously.
+
+Prioritize reusable infrastructure.
+
+Recommended development sequence:
+
+## Phase 1 — Technical Foundation
+
+Establish:
+
+- Research documentation.
+- Architecture registry.
+- Experiment tracking.
+- Dataset management.
+- Model loading.
+- Evaluation infrastructure.
+- Compute monitoring.
+
+## Phase 2 — Environment Engine
+
+Develop:
+
+- Environment registry.
+- Episode registry.
+- Task generation.
+- Execution interfaces.
+- Observation logging.
+- Evaluation.
+- Feedback.
+- Training-data export.
+
+## Phase 3 — Agentic Infrastructure
+
+Develop:
+
+- Agent orchestration.
+- Specialized agents.
+- Agent communication.
+- Tool integrations.
+- Agent evaluation.
+- Human approval controls.
+
+## Phase 4 — Initial Environment Collection
+
+Start with a small number of environments.
+
+Recommended initial candidates:
+
+- Software Engineering.
+- Deep Research.
+- Mathematics.
+- Coding.
+- Computer Use.
+- Kernel Engineering.
+
+Build, test and improve the common infrastructure before expanding.
+
+## Phase 5 — Multimodal Environments
+
+Introduce:
+
+- Blender.
+- 3D.
+- Robotics.
+- Audio.
+- Video.
+- Scientific visualization.
+- Hardware simulation.
+
+## Phase 6 — Advanced Training Integration
+
+Connect validated environments to:
+
+- SFT.
+- Distillation.
+- RLVR.
+- GRPO.
+- Curriculum learning.
+- Model evaluation.
+
+## Phase 7 — Low-Level Optimization
+
+Expand:
+
+- Custom kernels.
+- GPU profiling.
+- Compiler optimization.
+- Distributed training.
+- Inference optimization.
+
+## Phase 8 — Foundation Model Research
+
+Use the infrastructure to support systematic development and improvement of ThinkNet's foundation-model research.
+
+---
+
+# PART 15 — ENGINEERING PRINCIPLES
+
+All development should follow these principles.
+
+### 1. Modular Architecture
+
+Every component should have a defined responsibility and reusable interfaces.
+
+### 2. Interoperability
+
+Different environments should be able to communicate through standard interfaces.
+
+### 3. Reproducibility
+
+Experiments must be traceable and repeatable.
+
+### 4. Measurable Improvement
+
+Never claim that an optimization works without benchmarking it.
+
+### 5. Model-Agnostic Design
+
+Where practical, support different model architectures and providers.
+
+### 6. Resource Awareness
+
+Training and experiments must consider available compute, memory and cost.
+
+### 7. Safety
+
+Use sandboxed execution for code, controlled access for computer-use agents, synthetic data for sensitive enterprise tasks and human approval for consequential actions.
+
+### 8. Evidence-Based Research
+
+Distinguish established techniques, hypotheses, experimental findings and unverified claims.
+
+### 9. Reusable Infrastructure
+
+Build systems that support many environments rather than one-off implementations.
+
+### 10. Scientific Documentation
+
+Record decisions, failures, results and lessons.
+
+---
+
+# PART 16 — LONG-TERM VISION
+
+ThinkNet's long-term ambition is to establish a comprehensive AI research and engineering ecosystem.
+
+We want to investigate how models can develop:
+
+- Strong reasoning.
+- Scientific understanding.
+- Advanced coding.
+- Deep research capabilities.
+- Natural communication.
+- Long-context intelligence.
+- Multimodal intelligence.
+- Spatial understanding.
+- Software engineering.
+- Tool-use capabilities.
+- Autonomous workflows.
+- Efficient computational execution.
+
+We also want to improve the underlying technology:
+
+- Model architectures.
+- Training methods.
+- Data quality.
+- Distillation.
+- Inference.
+- GPU kernels.
+- Memory efficiency.
+- Distributed computing.
+
+The ultimate research direction is to combine these capabilities into increasingly capable foundation models.
+
+---
+
+# PART 17 — HOW CHATGPT SHOULD WORK WITH THINKNET
+
+When assisting with ThinkNet, follow these rules.
+
+## A. Think Like an AI Research Engineer
+
+Do not treat every idea as a simple software feature.
+
+Understand the research objective, technical requirements, experimental methodology and expected outcome.
+
+## B. Distinguish Research from Implementation
+
+For every major proposal, identify:
+
+- What we want to achieve.
+- Why it matters.
+- How it could work.
+- Existing approaches.
+- What is genuinely novel.
+- Technical requirements.
+- Potential limitations.
+- How to test it.
+
+## C. Avoid Unnecessary Complexity
+
+Do not recommend advanced infrastructure when a simpler approach is sufficient.
+
+Build incrementally.
+
+## D. Maintain Technical Accuracy
+
+Never invent benchmark results, performance improvements, paper findings or technical capabilities.
+
+When claims need verification, research them.
+
+## E. Preserve the Vision
+
+Do not reduce ThinkNet to:
+
+- A chatbot.
+- A simple training dashboard.
+- A collection of disconnected scripts.
+- A generic AI-agent framework.
+
+The larger ambition is an integrated AI research and engineering ecosystem.
+
+## F. Think in Reusable Systems
+
+Whenever proposing a new episode, environment or research tool, consider whether it can use the existing infrastructure.
+
+## G. Development Responses
+
+For implementation work, provide:
+
+1. Objective.
+2. Architecture.
+3. File structure.
+4. Dependencies.
+5. Implementation.
+6. Testing.
+7. Expected results.
+8. Next development step.
+
+## H. Maintain a Research Register
+
+Track:
+
+- Research ideas.
+- Hypotheses.
+- Experiments.
+- Completed work.
+- Failed experiments.
+- Technical decisions.
+- Future improvements.
+
+Do not silently discard earlier research directions.
+
+---
+
+# FINAL STATEMENT
+
+ThinkNet is being developed around a fundamental idea:
+
+**Intelligence should be developed through knowledge, computation, interaction, experimentation and experience.**
+
+We want to build the infrastructure that allows AI models to learn not only from text, but also from complex environments, professional software, scientific research, engineering systems, simulations and real-world problems.
+
+Our four major environment families are:
+
+1. Intelligence & Research.
+2. Real-World Engineering & Not Just Text.
+3. Low-Level Model Engineering.
+4. Agentic & Generative AI.
+
+These connect through a common environment engine, agentic training infrastructure, evaluation systems and model-development tools.
+
+The long-term ambition is to create a research ecosystem capable of supporting the development of highly capable, efficient and reliable foundation models.
+
+**THINKNET — Researching Intelligence. Engineering the Future.**

@@ -1,0 +1,6 @@
+{
+  "name": "ThinkNet — AI Research & Engineering Ecosystem",
+  "description": "Researching Intelligence. Engineering the Future. An integrated AI research and engineering ecosystem exploring how intelligent systems learn, reason, interact, experiment and evolve.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
